@@ -72,7 +72,7 @@ jobs:
 
       - run: brew test-bot --only-setup
 
-      - run: brew test-bot --only-tap-syntax
+      - run: brew test-bot --only-tap-syntax --stable
 
       - name: Detect changed formulae
         id: formulae

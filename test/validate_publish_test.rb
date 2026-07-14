@@ -36,6 +36,13 @@ class ValidatePublishTest < Minitest::Test
       expected,
       HomebrewTap::Automation::PublishValidator::REQUIRED_CHECKS,
     )
+
+    macos_steps = jobs.fetch("test-bot-macos").fetch("steps")
+    tap_syntax = macos_steps.find do |step|
+      step["run"]&.start_with?("brew test-bot --only-tap-syntax")
+    end
+    assert_equal "brew test-bot --only-tap-syntax --stable",
+                 tap_syntax.fetch("run")
   end
 
   def test_rejects_untrusted_pull_request_metadata

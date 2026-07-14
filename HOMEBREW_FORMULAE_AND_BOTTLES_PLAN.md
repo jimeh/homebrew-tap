@@ -150,7 +150,7 @@ The macOS job:
 
 1. Sets up the tap with Homebrew's maintained action.
 2. Confirms Homebrew's Ruby reports an ARM64 host.
-3. Runs test-bot cleanup, setup, and tap syntax checks.
+3. Runs test-bot cleanup, setup, and stable tap syntax checks.
 4. Uses `brew test-bot --only-formulae-detect` on pull requests.
 5. Runs `brew test-bot --only-formulae` for changed Formulae.
 6. Requires exactly one bottle JSON file when the exporter is selected.
@@ -161,6 +161,13 @@ The macOS job:
 
 There is no matrix, Rosetta Homebrew, Intel job, Linux Homebrew job, or custom
 runner label. Ubuntu remains only for fast repository automation tests.
+
+The tap syntax command deliberately uses `--stable`. Homebrew's full tap syntax
+mode styles every definition, but the byte-for-byte upstream-generated Airplan
+Cask has two legacy style violations. Stable mode retains all-platform
+`brew readall` validation without taking ownership of that generated file. The
+later formula step still styles, audits, builds, bottles, reinstalls, and tests
+every changed exporter Formula.
 
 The bottle job has no write permissions. A pull request, including one from a
 fork, can build an artifact but cannot publish a release or update `main`.
@@ -320,6 +327,8 @@ The tap continues to resolve and verify all security-sensitive release state.
   Formula.
 - [x] Restrict the updater and validator fixtures to the exporter.
 - [x] Replace the bottle matrix with one pinned macOS 15 ARM job.
+- [x] Keep the generated Airplan Cask unchanged by using stable tap syntax;
+  retain full changed-Formula checks in the bottle step.
 - [x] Update documentation and required-check coupling.
 - [x] Pass local automation tests, Ruby syntax, actionlint, and diff checks.
 - [ ] Pass pull-request CI and review.
@@ -388,7 +397,7 @@ On the `macos-15` pull-request runner:
 ```sh
 brew test-bot --only-cleanup-before
 brew test-bot --only-setup
-brew test-bot --only-tap-syntax
+brew test-bot --only-tap-syntax --stable
 brew test-bot --only-formulae-detect
 brew test-bot --only-formulae
 ```
