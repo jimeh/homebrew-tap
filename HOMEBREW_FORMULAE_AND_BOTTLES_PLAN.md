@@ -6,10 +6,10 @@ title: Tap-owned exporter formula and bottle automation plan
 
 ## Status
 
-The automation foundation is merged. The current pull request rescope is in
-progress: Airplan remains an upstream-managed Cask, while macOS Battery
-Exporter becomes the tap's only source Formula and receives one Apple Silicon
-macOS 15 bottle.
+The automation foundation is merged. The exporter-only pull request rescope
+has passed implementation review and CI: Airplan remains an upstream-managed
+Cask, while macOS Battery Exporter becomes the tap's only source Formula and
+receives one Apple Silicon macOS 15 bottle.
 
 The first exporter bottle and first automated exporter update remain manually
 gated. Trusted automatic bottle publication is a later phase and is not part of
@@ -332,14 +332,14 @@ The tap continues to resolve and verify all security-sensitive release state.
   retain full changed-Formula checks in the bottle step.
 - [x] Update documentation and required-check coupling.
 - [x] Pass local automation tests, Ruby syntax, actionlint, and diff checks.
-- [ ] Pass pull-request CI and review.
+- [x] Pass pull-request CI and independent Codex and Claude reviews.
 
-The implementation is complete locally. The rescope remains in progress until
-the revised pull request has passed review and CI.
+The rescope is complete and ready for the separately authorized first-bottle
+publication step.
 
 ### Phase 3: first exporter bottle
 
-- [ ] Review the open exporter source Formula pull request and obtain green CI.
+- [x] Review the open exporter source Formula pull request and obtain green CI.
 - [ ] Run manual `brew pr-pull` against its exact tested head SHA while the
   pull request remains open; let that workflow publish and integrate it.
 - [ ] Confirm the tap release contains one public bottle asset.
