@@ -1,6 +1,7 @@
 # typed: strict
 # frozen_string_literal: true
 
+require "yaml"
 require_relative "test_helper"
 
 # Exercises every trust boundary required before automatic publication.
@@ -15,6 +16,39 @@ class ValidatePublishTest < Minitest::Test
       valid_evidence,
       expected_bot: BOT,
     ).validate!
+  end
+
+  def test_required_checks_match_test_workflow_jobs
+    workflow_path = File.join(
+      __dir__,
+      "..",
+      HomebrewTap::Automation::PublishValidator::TEST_WORKFLOW,
+    )
+    jobs = YAML.safe_load(File.read(workflow_path)).fetch("jobs")
+
+    macos_job = jobs.fetch("test-bot-macos")
+    macos_checks = macos_job
+                   .dig("strategy", "matrix", "include")
+                   .map do |entry|
+      macos_job.fetch("name").gsub(
+        "${{ matrix.platform }}",
+        entry.fetch("platform"),
+      )
+    end
+
+    linux_job = jobs.fetch("test-bot-linux")
+    linux_checks = linux_job
+                   .dig("strategy", "matrix", "os")
+                   .map do |os|
+      linux_job.fetch("name").gsub("${{ matrix.os }}", os)
+    end
+
+    expected = [jobs.fetch("automation-tests").fetch("name")]
+    expected.concat(macos_checks, linux_checks)
+    assert_equal(
+      expected,
+      HomebrewTap::Automation::PublishValidator::REQUIRED_CHECKS,
+    )
   end
 
   def test_rejects_untrusted_pull_request_metadata

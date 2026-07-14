@@ -259,8 +259,8 @@ module HomebrewTap
       TEST_WORKFLOW = ".github/workflows/tests.yml"
       REQUIRED_CHECKS = [
         "automation tests",
-        "brew test-bot (macos-15-intel)",
-        "brew test-bot (macos-26)",
+        "brew test-bot (macos-14-arm64)",
+        "brew test-bot (macos-14-x86_64)",
         "brew test-bot (ubuntu-latest)",
         "brew test-bot (ubuntu-24.04-arm)",
       ].freeze
