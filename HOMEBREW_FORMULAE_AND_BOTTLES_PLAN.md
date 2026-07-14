@@ -165,9 +165,10 @@ runner label. Ubuntu remains only for fast repository automation tests.
 The tap syntax command deliberately uses `--stable`. Homebrew's full tap syntax
 mode styles every definition, but the byte-for-byte upstream-generated Airplan
 Cask has two legacy style violations. Stable mode retains all-platform
-`brew readall` validation without taking ownership of that generated file. The
-later formula step still styles, audits, builds, bottles, reinstalls, and tests
-every changed exporter Formula.
+`brew readall` validation, but skips tap-wide style, audit, and typecheck. That
+tradeoff avoids taking ownership of the generated Cask; the later formula step
+still styles, audits, builds, bottles, reinstalls, and tests every changed
+exporter Formula.
 
 The bottle job has no write permissions. A pull request, including one from a
 fork, can build an artifact but cannot publish a release or update `main`.

@@ -43,6 +43,35 @@ class ValidatePublishTest < Minitest::Test
     end
     assert_equal "brew test-bot --only-tap-syntax --stable",
                  tap_syntax.fetch("run")
+
+    detect_formulae = macos_steps.find do |step|
+      step["name"] == "Detect changed formulae"
+    end
+    assert_equal "github.event_name == 'pull_request'",
+                 detect_formulae.fetch("if")
+    assert_equal "brew test-bot --only-formulae-detect",
+                 detect_formulae.fetch("run")
+
+    build_formulae = macos_steps.find do |step|
+      step["name"] == "Build formulae"
+    end
+    assert_operator macos_steps.index(tap_syntax), :<,
+                    macos_steps.index(build_formulae)
+    assert_equal "github.event_name == 'pull_request'",
+                 build_formulae.fetch("if")
+    assert_equal(
+      {
+        "ADDED_FORMULAE"   => "${{ steps.formulae.outputs.added_formulae }}",
+        "DELETED_FORMULAE" => "${{ steps.formulae.outputs.deleted_formulae }}",
+        "TESTING_FORMULAE" => "${{ steps.formulae.outputs.testing_formulae }}",
+      },
+      build_formulae.fetch("env"),
+    )
+    formula_run = build_formulae.fetch("run")
+    assert_includes formula_run, "brew test-bot --only-formulae"
+    assert_includes formula_run, '"--testing-formulae=$TESTING_FORMULAE"'
+    assert_includes formula_run, '"--added-formulae=$ADDED_FORMULAE"'
+    assert_includes formula_run, '"--deleted-formulae=$DELETED_FORMULAE"'
   end
 
   def test_rejects_untrusted_pull_request_metadata
