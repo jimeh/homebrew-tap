@@ -7,7 +7,8 @@ title: Tap-owned formulae and bottle automation plan
 Date: 2026-07-14
 
 Status: Foundation [PR #1](https://github.com/jimeh/homebrew-tap/pull/1) is
-merged. Source formula migration is in progress.
+merged. Source formula migration and initial bottle work is in progress in
+[PR #3](https://github.com/jimeh/homebrew-tap/pull/3).
 
 ## Recommendation
 
@@ -98,22 +99,44 @@ Start with this matrix:
 
 | Runner | Bottle tag | Airplan | Exporter |
 | --- | --- | ---: | ---: |
-| Current GitHub-hosted Apple Silicon macOS | `arm64_<macOS>` | yes | yes |
-| Current supported Intel macOS runner | `<macOS>` | yes | yes |
+| `macos-14`, native Apple Silicon | `arm64_sonoma` | yes | yes |
+| `macos-14`, Intel Homebrew under Rosetta | `sonoma` | yes | yes |
 | `ubuntu-latest` in Homebrew's container | `x86_64_linux` | yes | skipped |
 | `ubuntu-24.04-arm` in Homebrew's container | `arm64_linux` | yes | skipped |
 
-This preserves Airplan's existing four OS/architecture combinations. The
-official `brew tap-new` template currently includes Apple Silicon macOS, Intel
-macOS, and x86-64 Linux; Linux ARM is the one intentional extension. GitHub now
-provides `ubuntu-24.04-arm`, so it does not require a self-hosted runner.
+This preserves Airplan's existing four OS/architecture combinations without a
+paid Intel runner. The two macOS jobs use the same standard, GitHub-hosted
+Apple Silicon Sonoma runner. The native job uses `/opt/homebrew`. The Intel job
+installs a second Homebrew in `/usr/local`, invokes it through
+`arch -x86_64`, and builds inside Rosetta 2. Homebrew then generates the normal
+Intel `sonoma` tag rather than an artificial cross-compiled archive.
 
-The Intel Sequoia runner has no bottle for the current core Go formula. Its
-test-bot invocation therefore builds core `go` alongside the detected tap
-formulae, then removes only the generated Go bottle artifacts. Each PR job
-derives its expected bottle count from test-bot's detected formula set before
-artifact upload. The initial migration expects two bottles on macOS and one on
-Linux.
+The current core Go formula provides both `arm64_sonoma` and `sonoma` bottles,
+so both jobs can use Homebrew's normal bottle-only build-dependency policy. The
+workflow verifies the active Homebrew prefix and Ruby host CPU before running
+test-bot, then verifies every generated bottle JSON contains the matrix's exact
+expected tag. Each job also derives its expected bottle count from test-bot's
+detected formula set before artifact upload. The initial migration expects two
+bottles in each macOS job and one in each Linux job.
+
+Homebrew can select an older compatible macOS bottle for a newer macOS release
+when the architecture matches. These Sonoma bottles therefore cover Sonoma and
+later macOS releases for both architectures. They do not cover an older macOS
+release than Sonoma.
+
+This is a deliberately time-limited free-runner strategy. GitHub began
+deprecating `macos-14` on July 6, 2026 and plans to remove it on November 2,
+2026. Before removal, refresh this matrix. The cost-free fallback is to move
+the same native/Rosetta pairing to `macos-15`; new formula versions would then
+have Sequoia bottles, and Sonoma users would build those versions from source.
+Continuing to publish new Sonoma bottles after the runner disappears requires
+access to a Sonoma builder, such as a self-hosted Mac or a paid macOS service.
+Existing published Sonoma bottles remain available for their formula versions.
+
+The official `brew tap-new` template currently includes Apple Silicon macOS,
+Intel macOS, and x86-64 Linux; Linux ARM and the Rosetta replacement for the
+paid Intel runner are the intentional extensions. GitHub provides
+`ubuntu-24.04-arm`, so Linux ARM also does not require a self-hosted runner.
 
 The exporter remains macOS-only through `depends_on :macos`. Homebrew's test bot
 should load and audit it on Linux but skip its build there.
@@ -293,14 +316,18 @@ Triggers:
 
 Jobs:
 
-1. Set up Homebrew with `Homebrew/actions/setup-homebrew`.
-2. Cache Homebrew's Bundler gems using only the generated safe cache path.
-3. Run `brew test-bot --only-cleanup-before`.
-4. Run `brew test-bot --only-setup`.
-5. Run `brew test-bot --only-tap-syntax`.
-6. On pull requests, run `brew test-bot --only-formulae`; Homebrew derives the
+1. On the Intel Sonoma entry, install `/usr/local` Homebrew under Rosetta and
+   put an `arch -x86_64` wrapper first on `PATH`.
+2. Set up the selected Homebrew with `Homebrew/actions/setup-homebrew`.
+3. Verify the selected prefix and Homebrew Ruby host architecture.
+4. Cache Homebrew's Bundler gems using only the generated safe cache path.
+5. Run `brew test-bot --only-cleanup-before`.
+6. Run `brew test-bot --only-setup`.
+7. Run `brew test-bot --only-tap-syntax`.
+8. On pull requests, run `brew test-bot --only-formulae`; Homebrew derives the
    version-specific tap release URL.
-7. Upload `*.bottle.*` as one artifact per matrix entry, even when a later test
+9. Require the expected bottle count and platform tag, then upload
+   `*.bottle.*` as one artifact per matrix entry, even when a later test
    step fails, so failures are diagnosable.
 
 Security properties:
@@ -553,13 +580,17 @@ produces a durable result. Link PRs and workflow runs here once they exist.
 - [x] Confirm Linux ARM bottles, `--HEAD`, separate exporter modernization, and
   manual publication for the first one or two generated updates.
 - [x] Split bootstrap into a foundation PR and formula migration PR.
+- [x] Select native and Rosetta builds on the standard `macos-14` runner for
+  cost-free `arm64_sonoma` and `sonoma` bottles, with a documented November
+  2026 refresh deadline.
 - [x] Implement and locally verify the tap foundation changes on
   `feat/homebrew-tap-foundation`. Ruby tests, syntax checks, and actionlint
   pass; the pull request matrix owns `brew test-bot` verification.
 - [x] Open, review, and merge foundation
   [PR #1](https://github.com/jimeh/homebrew-tap/pull/1).
-- [ ] Implement the source formula migration. In progress on the feature
-  branch.
+- [ ] Implement the source formula migration. In progress in
+  [PR #3](https://github.com/jimeh/homebrew-tap/pull/3); formula definitions
+  are complete and the revised macOS bottle matrix is being verified.
 - [ ] Build, publish, and verify the initial bottles and tap releases.
 - [x] Configure the Release Bot client ID variable, private key secret, and
   reserved `automated-formula-update` label.
@@ -665,6 +696,9 @@ Also check:
 ### Workflow checks
 
 - Formula PRs produce all expected bottle artifacts.
+- The native Sonoma job reports `/opt/homebrew`, `arm64`, and
+  `arm64_sonoma`; the Rosetta job reports `/usr/local`, `x86_64`, and
+  `sonoma`.
 - Exporter PRs skip Linux without failing the matrix.
 - Airplan emits both x86-64 and ARM64 Linux bottle metadata.
 - `brew pr-pull --head-sha` rejects a stale or changed SHA.
@@ -775,6 +809,8 @@ Go modernization can be a separate exporter PR.
    bottles PR.
 7. Configure the GitHub App repository variables and secrets during foundation
    PR review or before tap-side dispatch validation.
+8. Build both Sonoma bottle architectures on standard `macos-14` Apple Silicon
+   runners: ARM natively and Intel through `/usr/local` Homebrew under Rosetta.
 
 ## Sources
 
@@ -789,6 +825,9 @@ Go modernization can be a separate exporter PR.
 - [GitHub Packages access and visibility](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
 - [GitHub Actions: events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)
 - [GitHub Actions: choosing a runner](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job)
+- [GitHub Actions runner images and macOS 14 retirement notice](https://github.com/actions/runner-images)
+- [Homebrew macOS bottle compatibility selection](https://github.com/Homebrew/brew/blob/master/Library/Homebrew/extend/os/mac/utils/bottles.rb)
+- [Homebrew installation prefixes on Apple Silicon](https://docs.brew.sh/Installation)
 - [GitHub REST API: create a repository dispatch event](https://docs.github.com/en/rest/repos/repos#create-a-repository-dispatch-event)
 - [GitHub Actions: automatic token authentication](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)
 - [Airplan release configuration](https://github.com/jimeh/airplan/blob/main/.goreleaser.yaml)

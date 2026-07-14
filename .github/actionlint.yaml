@@ -1,7 +1,0 @@
-self-hosted-runner:
-  # Homebrew-managed GitHub-hosted runners not yet known to actionlint.
-  labels:
-    - macos-15-intel
-    - macos-26
-config-variables:
-  - RELEASE_BOT_CLIENT_ID

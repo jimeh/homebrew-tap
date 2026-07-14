@@ -35,23 +35,86 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
   test-bot-macos:
-    name: brew test-bot (${{ matrix.os }})
+    name: brew test-bot (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15-intel, macos-26]
-    runs-on: ${{ matrix.os }}
+        include:
+          - platform: macos-14-arm64
+            runner: macos-14
+            architecture: arm64
+            bottle-tag: arm64_sonoma
+            prefix: /opt/homebrew
+            rosetta: false
+          - platform: macos-14-x86_64
+            runner: macos-14
+            architecture: x86_64
+            bottle-tag: sonoma
+            prefix: /usr/local
+            rosetta: true
+    runs-on: ${{ matrix.runner }}
     permissions:
       actions: read
       checks: read
       contents: read
       pull-requests: read
     steps:
+      - name: Install Intel Homebrew under Rosetta
+        if: matrix.rosetta == true
+        shell: bash
+        run: |
+          install_ref=c7952e40b7957268f61643152f4db725379b292e
+          installer="$RUNNER_TEMP/install-homebrew.sh"
+          curl -fsSLo "$installer" \
+            "https://raw.githubusercontent.com/Homebrew/install/${install_ref}/install.sh"
+
+          NONINTERACTIVE=1 arch -x86_64 /bin/bash "$installer"
+
+          wrapper_dir="$RUNNER_TEMP/rosetta-homebrew/bin"
+          mkdir -p "$wrapper_dir"
+          printf '%s\n' \
+            '#!/bin/bash' \
+            'exec /usr/bin/arch -x86_64 /usr/local/bin/brew "$@"' \
+            >"$wrapper_dir/brew"
+          chmod +x "$wrapper_dir/brew"
+          printf '%s\n' "$wrapper_dir" >>"$GITHUB_PATH"
+
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Activate Rosetta Homebrew
+        if: matrix.rosetta == true
+        shell: bash
+        run: |
+          printf '%s\n' \
+            "$RUNNER_TEMP/rosetta-homebrew/bin" >>"$GITHUB_PATH"
+
+      - name: Verify Homebrew target
+        shell: bash
+        env:
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+          EXPECTED_PREFIX: ${{ matrix.prefix }}
+        run: |
+          actual_prefix="$(brew --prefix)"
+          actual_architecture="$(
+            brew ruby -rrbconfig -e \
+              'print RbConfig::CONFIG.fetch("host_cpu")'
+          )"
+
+          if [[ "$actual_prefix" != "$EXPECTED_PREFIX" ]]; then
+            printf 'Expected Homebrew prefix %s, found %s.\n' \
+              "$EXPECTED_PREFIX" "$actual_prefix" >&2
+            exit 1
+          fi
+
+          if [[ "$actual_architecture" != "$EXPECTED_ARCHITECTURE" ]]; then
+            printf 'Expected Homebrew architecture %s, found %s.\n' \
+              "$EXPECTED_ARCHITECTURE" "$actual_architecture" >&2
+            exit 1
+          fi
 
       - name: Detect source formulae
         id: source-formulae
@@ -69,8 +132,8 @@ jobs:
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ${{ matrix.os }}-rubygems-
+          key: ${{ matrix.platform }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: ${{ matrix.platform }}-rubygems-
 
       - run: brew test-bot --only-cleanup-before
 
@@ -100,21 +163,10 @@ jobs:
             exit 0
           fi
 
-          testing_formulae="$TESTING_FORMULAE"
-          if [[ "$RUNNER_ARCH" == "X64" && -n "$testing_formulae" ]]; then
-            # Intel Sequoia has no current Go bottle, so bootstrap it in the
-            # same test-bot run while preserving the detected tap formulae.
-            testing_formulae="go,$testing_formulae"
-          fi
-
           brew test-bot --only-formulae \
-            "--testing-formulae=$testing_formulae" \
+            "--testing-formulae=$TESTING_FORMULAE" \
             "--added-formulae=$ADDED_FORMULAE" \
             "--deleted-formulae=$DELETED_FORMULAE"
-
-          if [[ "$RUNNER_ARCH" == "X64" && -n "$TESTING_FORMULAE" ]]; then
-            rm -f go--*.bottle.*
-          fi
 
       - name: Verify expected bottles
         if: >-
@@ -123,6 +175,7 @@ jobs:
           steps.source-formulae.outputs.present == 'true'
         shell: bash
         env:
+          EXPECTED_BOTTLE_TAG: ${{ matrix.bottle-tag }}
           TESTING_FORMULAE: ${{ steps.formulae.outputs.testing_formulae }}
         run: |
           expected=0
@@ -137,6 +190,13 @@ jobs:
           for bottle in ./*.bottle.json; do
             if [[ -e "$bottle" ]]; then
               count=$((count + 1))
+              if ! jq --exit-status --arg tag "$EXPECTED_BOTTLE_TAG" \
+                'all(.[]; .bottle.tags[$tag] != null)' \
+                "$bottle" >/dev/null; then
+                printf 'Bottle %s does not contain tag %s.\n' \
+                  "$bottle" "$EXPECTED_BOTTLE_TAG" >&2
+                exit 1
+              fi
             fi
           done
 
@@ -151,7 +211,7 @@ jobs:
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: bottles_${{ matrix.os }}
+          name: bottles_${{ matrix.platform }}
           path: '*.bottle.*'
           if-no-files-found: ignore
 
