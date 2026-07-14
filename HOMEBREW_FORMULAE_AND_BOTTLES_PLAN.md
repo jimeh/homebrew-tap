@@ -113,11 +113,12 @@ Intel `sonoma` tag rather than an artificial cross-compiled archive.
 
 The current core Go formula provides both `arm64_sonoma` and `sonoma` bottles,
 so both jobs can use Homebrew's normal bottle-only build-dependency policy. The
-workflow verifies the active Homebrew prefix and Ruby host CPU before running
-test-bot, then verifies every generated bottle JSON contains the matrix's exact
-expected tag. Each job also derives its expected bottle count from test-bot's
-detected formula set before artifact upload. The initial migration expects two
-bottles in each macOS job and one in each Linux job.
+workflow verifies the active Homebrew prefix, repository, tap path, and Ruby
+host CPU before running test-bot, then verifies every generated bottle JSON
+contains the matrix's exact expected tag. Each job also derives its expected
+bottle count from test-bot's detected formula set before artifact upload. The
+initial migration expects two bottles in each macOS job and one in each Linux
+job.
 
 Homebrew can select an older compatible macOS bottle for a newer macOS release
 when the architecture matches. These Sonoma bottles therefore cover Sonoma and
@@ -319,7 +320,8 @@ Jobs:
 1. On the Intel Sonoma entry, install `/usr/local` Homebrew under Rosetta and
    put an `arch -x86_64` wrapper first on `PATH`.
 2. Set up the selected Homebrew with `Homebrew/actions/setup-homebrew`.
-3. Verify the selected prefix and Homebrew Ruby host architecture.
+3. Verify the selected prefix, repository, tap path, and Homebrew Ruby host
+   architecture.
 4. Cache Homebrew's Bundler gems using only the generated safe cache path.
 5. Run `brew test-bot --only-cleanup-before`.
 6. Run `brew test-bot --only-setup`.

@@ -45,12 +45,14 @@ jobs:
             architecture: arm64
             bottle-tag: arm64_sonoma
             prefix: /opt/homebrew
+            repository: /opt/homebrew
             rosetta: false
           - platform: macos-14-x86_64
             runner: macos-14
             architecture: x86_64
             bottle-tag: sonoma
             prefix: /usr/local
+            repository: /usr/local/Homebrew
             rosetta: true
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -97,8 +99,11 @@ jobs:
         env:
           EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
           EXPECTED_PREFIX: ${{ matrix.prefix }}
+          EXPECTED_REPOSITORY: ${{ matrix.repository }}
+          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
         run: |
           actual_prefix="$(brew --prefix)"
+          actual_repository="$(brew --repository)"
           actual_architecture="$(
             brew ruby -rrbconfig -e \
               'print RbConfig::CONFIG.fetch("host_cpu")'
@@ -110,9 +115,22 @@ jobs:
             exit 1
           fi
 
+          if [[ "$actual_repository" != "$EXPECTED_REPOSITORY" ]]; then
+            printf 'Expected Homebrew repository %s, found %s.\n' \
+              "$EXPECTED_REPOSITORY" "$actual_repository" >&2
+            exit 1
+          fi
+
           if [[ "$actual_architecture" != "$EXPECTED_ARCHITECTURE" ]]; then
             printf 'Expected Homebrew architecture %s, found %s.\n' \
               "$EXPECTED_ARCHITECTURE" "$actual_architecture" >&2
+            exit 1
+          fi
+
+          expected_tap_path="$EXPECTED_REPOSITORY/Library/Taps/jimeh/homebrew-tap"
+          if [[ "$TAP_PATH" != "$expected_tap_path" ]]; then
+            printf 'Expected tap path %s, found %s.\n' \
+              "$expected_tap_path" "$TAP_PATH" >&2
             exit 1
           fi
 
@@ -190,9 +208,13 @@ jobs:
           for bottle in ./*.bottle.json; do
             if [[ -e "$bottle" ]]; then
               count=$((count + 1))
-              if ! jq --exit-status --arg tag "$EXPECTED_BOTTLE_TAG" \
-                'all(.[]; .bottle.tags[$tag] != null)' \
-                "$bottle" >/dev/null; then
+              if ! brew ruby -rjson -e '
+                tag, path = ARGV
+                metadata = JSON.parse(File.read(path)).values
+                exit 1 unless metadata.all? do |item|
+                  item.dig("bottle", "tags", tag)
+                end
+              ' "$EXPECTED_BOTTLE_TAG" "$bottle"; then
                 printf 'Bottle %s does not contain tag %s.\n' \
                   "$bottle" "$EXPECTED_BOTTLE_TAG" >&2
                 exit 1
