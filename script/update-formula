@@ -1,0 +1,34 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/homebrew_tap/automation"
+
+options = { repo_root: File.expand_path("..", __dir__) }
+OptionParser.new do |parser|
+  parser.banner = "Usage: script/update-formula [options]"
+  parser.on("--formula NAME") { |value| options[:formula] = value }
+  parser.on("--version VERSION") { |value| options[:version] = value }
+  parser.on("--tag TAG") { |value| options[:tag] = value }
+  parser.on("--commit SHA") { |value| options[:commit] = value }
+  parser.on("--source-run URL") { |value| options[:source_run] = value }
+  parser.on("--repo-root PATH") { |value| options[:repo_root] = value }
+end.parse!
+
+begin
+  request = HomebrewTap::Automation::Request.build(
+    formula:    options.fetch(:formula),
+    version:    options.fetch(:version),
+    tag:        options.fetch(:tag),
+    commit:     options.fetch(:commit),
+    source_run: options[:source_run],
+  )
+  result = HomebrewTap::Automation::Updater.new(
+    repo_root: options.fetch(:repo_root),
+  ).call(request)
+  puts JSON.generate(result.to_h)
+rescue HomebrewTap::Automation::Error, KeyError, OptionParser::ParseError => e
+  warn "update-formula: #{e.message}"
+  exit 1
+end

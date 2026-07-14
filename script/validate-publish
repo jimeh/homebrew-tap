@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/homebrew_tap/automation"
+
+options = {}
+OptionParser.new do |parser|
+  parser.banner = "Usage: script/validate-publish [options]"
+  parser.on("--evidence PATH") { |value| options[:evidence] = value }
+  parser.on("--expected-bot LOGIN") { |value| options[:expected_bot] = value }
+end.parse!
+
+begin
+  evidence = JSON.parse(File.read(options.fetch(:evidence)))
+  HomebrewTap::Automation::PublishValidator.new(
+    evidence,
+    expected_bot: options.fetch(:expected_bot),
+  ).validate!
+  puts JSON.generate(valid: true)
+rescue HomebrewTap::Automation::Error, JSON::ParserError, KeyError,
+       OptionParser::ParseError, ArgumentError, TypeError => e
+  warn "validate-publish: #{e.message}"
+  exit 1
+end
