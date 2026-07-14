@@ -24,7 +24,7 @@ class ValidatePublishTest < Minitest::Test
       "..",
       HomebrewTap::Automation::PublishValidator::TEST_WORKFLOW,
     )
-    jobs = YAML.safe_load(File.read(workflow_path)).fetch("jobs")
+    jobs = YAML.safe_load_file(workflow_path).fetch("jobs")
 
     macos_job = jobs.fetch("test-bot-macos")
     macos_checks = macos_job
