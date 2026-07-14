@@ -1,3 +1,4 @@
+# typed: strict
 # frozen_string_literal: true
 
 require "fileutils"
@@ -6,12 +7,14 @@ require "minitest/autorun"
 require "tmpdir"
 require_relative "../lib/homebrew_tap/automation"
 
+# Shared fixtures and fakes for the tap automation tests.
 module AutomationTestHelpers
   COMMIT = "a" * 40
   SOURCE_SHA256 = "b" * 64
 
+  # Records updater calls without accessing GitHub or downloading archives.
   class FakeGitHub
-    attr_accessor :release_error, :sha256
+    attr_accessor :release_error, :release_error_on_call, :sha256
     attr_reader :archive_calls, :verify_calls
 
     def initialize(sha256: SOURCE_SHA256)
@@ -22,7 +25,9 @@ module AutomationTestHelpers
 
     def verify_release!(_request)
       @verify_calls += 1
-      raise release_error if release_error
+      should_raise = release_error &&
+                     (!release_error_on_call || @verify_calls >= release_error_on_call)
+      raise release_error if should_raise
     end
 
     def archive_sha256(_request)
@@ -43,10 +48,10 @@ module AutomationTestHelpers
     source_run: nil
   )
     HomebrewTap::Automation::Request.build(
-      formula: formula,
-      version: version,
-      tag: tag,
-      commit: commit,
+      formula:    formula,
+      version:    version,
+      tag:        tag,
+      commit:     commit,
       source_run: source_run,
     )
   end

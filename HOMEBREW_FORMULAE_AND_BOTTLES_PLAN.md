@@ -576,6 +576,11 @@ produces a durable result. Link PRs and workflow runs here once they exist.
    installed package definitions.
 6. Open, review, and merge the foundation PR into `main`.
 
+Until Phase 2 creates `Formula/*.rb`, the test matrix performs Homebrew setup
+but skips tap syntax and formula builds. The legacy generated exporter cannot
+pass current cross-platform `brew readall`; the file-existence gate removes
+itself automatically when the source formulae land.
+
 The split is required because GitHub only allows manual dispatch of a workflow
 that already exists on the default branch. Merging this PR first makes
 `publish.yml` available to publish the bottles built by the migration PR.

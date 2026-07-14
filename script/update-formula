@@ -18,10 +18,10 @@ end.parse!
 
 begin
   request = HomebrewTap::Automation::Request.build(
-    formula: options.fetch(:formula),
-    version: options.fetch(:version),
-    tag: options.fetch(:tag),
-    commit: options.fetch(:commit),
+    formula:    options.fetch(:formula),
+    version:    options.fetch(:version),
+    tag:        options.fetch(:tag),
+    commit:     options.fetch(:commit),
     source_run: options[:source_run],
   )
   result = HomebrewTap::Automation::Updater.new(

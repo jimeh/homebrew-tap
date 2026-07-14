@@ -34,6 +34,7 @@ permissions: {}
 
 jobs:
   update:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -103,6 +104,7 @@ jobs:
           FORMULA_PATH: ${{ steps.update.outputs.path }}
           GH_TOKEN: ${{ steps.release-bot.outputs.token }}
           SOURCE_SHA256: ${{ steps.update.outputs.source_sha256 }}
+          UPSTREAM_REPOSITORY: ${{ steps.update.outputs.repository }}
         run: |
           branch="automation/$FORMULA-$VERSION"
           open_prs="$(gh pr list --state open --json headRefName | jq \
@@ -113,6 +115,9 @@ jobs:
             exit 1
           fi
           gh label view automated-formula-update >/dev/null
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+            git push origin --delete "$branch"
+          fi
 
           git switch -c "$branch"
           git add "$FORMULA_PATH"
@@ -124,7 +129,7 @@ jobs:
           {
             echo "Updates $FORMULA to the published $TAG release."
             echo
-            echo "- Upstream: https://github.com/${{ steps.update.outputs.repository }}/releases/tag/$TAG"
+            echo "- Upstream: https://github.com/$UPSTREAM_REPOSITORY/releases/tag/$TAG"
             echo "- Commit: \`$COMMIT\`"
             echo "- Source SHA-256: \`$SOURCE_SHA256\`"
             if [[ -n "$SOURCE_RUN" ]]; then

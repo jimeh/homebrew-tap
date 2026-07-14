@@ -1,3 +1,4 @@
+# typed: strict
 # frozen_string_literal: true
 
 require "digest"
@@ -17,15 +18,15 @@ module HomebrewTap
     end
 
     FORMULAE = {
-      "airplan" => Formula.new(
-        name: "airplan",
+      "airplan"                => Formula.new(
+        name:       "airplan",
         repository: "jimeh/airplan",
-        path: "Formula/airplan.rb",
+        path:       "Formula/airplan.rb",
       ),
       "macos-battery-exporter" => Formula.new(
-        name: "macos-battery-exporter",
+        name:       "macos-battery-exporter",
         repository: "jimeh/macos-battery-exporter",
-        path: "Formula/macos-battery-exporter.rb",
+        path:       "Formula/macos-battery-exporter.rb",
       ),
     }.freeze
 
@@ -44,13 +45,10 @@ module HomebrewTap
       def self.build(formula:, version:, tag:, commit:, source_run: nil)
         spec = FORMULAE[formula]
         raise Error, "unknown formula: #{formula.inspect}" unless spec
-        unless VERSION_PATTERN.match?(version)
-          raise Error, "version must be stable MAJOR.MINOR.PATCH"
-        end
-        raise Error, "tag must be v#{version}" unless tag == "v#{version}"
-        unless COMMIT_PATTERN.match?(commit)
-          raise Error, "commit must be a lowercase 40-character SHA"
-        end
+        raise Error, "version must be stable MAJOR.MINOR.PATCH" unless VERSION_PATTERN.match?(version)
+        raise Error, "tag must be v#{version}" if tag != "v#{version}"
+        raise Error, "commit must be a lowercase 40-character SHA" unless COMMIT_PATTERN.match?(commit)
+
         source_run = nil if source_run.to_s.empty?
         if source_run
           repository = Regexp.escape(spec.repository)
@@ -62,10 +60,10 @@ module HomebrewTap
         end
 
         new(
-          formula: spec,
-          version: version,
-          tag: tag,
-          commit: commit,
+          formula:    spec,
+          version:    version,
+          tag:        tag,
+          commit:     commit,
           source_run: source_run,
         )
       end
@@ -79,16 +77,16 @@ module HomebrewTap
     ) do
       def to_h
         {
-          status: status.to_s,
-          formula: request.formula.name,
-          repository: request.formula.repository,
-          path: request.formula.path,
-          version: request.version,
-          tag: request.tag,
-          commit: request.commit,
-          archive_url: request.formula.archive_url(request.version),
+          status:        status.to_s,
+          formula:       request.formula.name,
+          repository:    request.formula.repository,
+          path:          request.formula.path,
+          version:       request.version,
+          tag:           request.tag,
+          commit:        request.commit,
+          archive_url:   request.formula.archive_url(request.version),
           source_sha256: source_sha256,
-          source_run: request.source_run,
+          source_run:    request.source_run,
         }.compact
       end
     end
@@ -96,7 +94,7 @@ module HomebrewTap
     # Minimal GitHub client. It resolves all security-sensitive release data
     # independently instead of trusting repository_dispatch payload fields.
     class GitHubClient
-      def initialize(token: ENV["GH_TOKEN"])
+      def initialize(token: ENV.fetch("GH_TOKEN", nil))
         @token = token
       end
 
@@ -104,19 +102,19 @@ module HomebrewTap
         release = gh_json(
           "repos/#{request.formula.repository}/releases/tags/#{request.tag}",
         )
-        unless release["tag_name"] == request.tag &&
-               release["draft"] == false &&
-               release["prerelease"] == false &&
-               !release["published_at"].to_s.empty?
+        if release["tag_name"] != request.tag ||
+           release["draft"] != false ||
+           release["prerelease"] != false ||
+           release["published_at"].to_s.empty?
           raise Error, "release must be published, non-draft, and stable"
         end
 
         resolved = gh_json(
           "repos/#{request.formula.repository}/commits/#{request.tag}",
         ).fetch("sha")
-        unless resolved == request.commit
-          raise Error, "tag resolves to #{resolved}, expected #{request.commit}"
-        end
+        return if resolved == request.commit
+
+        raise Error, "tag resolves to #{resolved}, expected #{request.commit}"
       end
 
       def archive_sha256(request)
@@ -124,11 +122,9 @@ module HomebrewTap
         stdout, stderr, status = Open3.capture3(
           "curl", "--fail", "--silent", "--show-error", "--location",
           "--proto", "=https", "--proto-redir", "=https", "--retry", "3",
-          url,
+          url
         )
-        unless status.success?
-          raise Error, "archive download failed: #{stderr.strip}"
-        end
+        raise Error, "archive download failed: #{stderr.strip}" unless status.success?
 
         Digest::SHA256.hexdigest(stdout)
       end
@@ -163,9 +159,7 @@ module HomebrewTap
       end
 
       def update!(request, source_sha256)
-        unless SHA256_PATTERN.match?(source_sha256)
-          raise Error, "invalid source SHA-256"
-        end
+        raise Error, "invalid source SHA-256" unless SHA256_PATTERN.match?(source_sha256)
         raise Error, "formula does not exist: #{path}" unless File.file?(path)
 
         before = File.read(path)
@@ -192,11 +186,9 @@ module HomebrewTap
 
         current_version = match[1]
         comparison = Gem::Version.new(request.version) <=>
-          Gem::Version.new(current_version)
+                     Gem::Version.new(current_version)
         return [content, :noop] if comparison.zero?
-        if comparison.negative?
-          raise Error, "refusing downgrade from #{current_version} to #{request.version}"
-        end
+        raise Error, "refusing downgrade from #{current_version} to #{request.version}" if comparison.negative?
 
         unless supported_source_url?(match[0], current_version, request)
           raise Error, "formula source repository does not match allowlist"
@@ -204,18 +196,15 @@ module HomebrewTap
 
         without_bottle = remove_bottle_block(content)
         url_matches = without_bottle.scan(URL_PATTERN)
-        unless url_matches.length == 1
-          raise Error, "formula must contain exactly one supported source URL"
-        end
+        raise Error, "formula must contain exactly one supported source URL" if url_matches.length != 1
+
         sha_matches = without_bottle.scan(SOURCE_SHA_PATTERN)
-        unless sha_matches.length == 1
-          raise Error, "formula must contain exactly one source SHA-256"
-        end
+        raise Error, "formula must contain exactly one source SHA-256" if sha_matches.length != 1
 
         updated = without_bottle.sub(
           URL_PATTERN,
           request.formula.archive_url(request.version),
-        ).sub(SOURCE_SHA_PATTERN, %(  sha256 "#{source_sha256}"))
+        ).sub(SOURCE_SHA_PATTERN, %Q(  sha256 "#{source_sha256}"))
         [updated, :updated]
       end
 
@@ -234,9 +223,7 @@ module HomebrewTap
         raise Error, "unterminated bottle block" unless finish
 
         lines.slice!(start..finish)
-        while lines[start] == "\n" && lines[start - 1] == "\n"
-          lines.delete_at(start)
-        end
+        lines.delete_at(start) while lines[start] == "\n" && lines[start - 1] == "\n"
         lines.join
       end
     end
@@ -252,16 +239,13 @@ module HomebrewTap
         editor = FormulaEditor.new(File.join(@repo_root, request.formula.path))
         current_version = editor.current_version(request)
         comparison = Gem::Version.new(request.version) <=>
-          Gem::Version.new(current_version)
-        if comparison.zero?
-          return Result.new(status: :noop, request: request, source_sha256: nil)
-        end
-        if comparison.negative?
-          raise Error, "refusing downgrade from #{current_version} to #{request.version}"
-        end
+                     Gem::Version.new(current_version)
+        return Result.new(status: :noop, request: request, source_sha256: nil) if comparison.zero?
+        raise Error, "refusing downgrade from #{current_version} to #{request.version}" if comparison.negative?
 
         @github.verify_release!(request)
         source_sha256 = @github.archive_sha256(request)
+        @github.verify_release!(request)
         status = editor.update!(request, source_sha256)
         Result.new(status: status, request: request, source_sha256: source_sha256)
       end
@@ -272,6 +256,7 @@ module HomebrewTap
     class PublishValidator
       REQUIRED_LABEL = "automated-formula-update"
       TAP_REPOSITORY = "jimeh/homebrew-tap"
+      TEST_WORKFLOW = ".github/workflows/tests.yml"
       REQUIRED_CHECKS = [
         "automation tests",
         "brew test-bot (macos-15-intel)",
@@ -301,6 +286,7 @@ module HomebrewTap
           pr["head_repository"] == TAP_REPOSITORY,
           "pull request is from a fork",
         )
+        require_value(pr["base_ref"] == "main", "unexpected pull request base")
         expected_branch = "automation/#{request.formula.name}-#{request.version}"
         require_value(pr["head_ref"] == expected_branch, "unexpected automation branch")
         require_value(
@@ -315,6 +301,7 @@ module HomebrewTap
           workflow["conclusion"] == "success",
           "workflow did not succeed",
         )
+        validate_workflow_identity!(workflow, pr)
         validate_checks!(workflow)
         require_value(
           Array(pr["changed_files"]) == [request.formula.path],
@@ -345,24 +332,40 @@ module HomebrewTap
 
       def validate_checks!(workflow)
         checks = Array(workflow["checks"])
-        conclusions = checks.to_h { |check| [check["name"], check["conclusion"]] }
+        by_name = checks.group_by { |check| check["name"] }
+        ambiguous = REQUIRED_CHECKS.reject do |name|
+          by_name.fetch(name, []).length == 1
+        end
+        require_value(
+          ambiguous.empty?,
+          "required checks are missing or ambiguous: #{ambiguous.join(", ")}",
+        )
+        conclusions = by_name.transform_values { |runs| runs.fetch(0)["conclusion"] }
         failed = REQUIRED_CHECKS.reject do |name|
           conclusions[name] == "success"
         end
         require_value(
           failed.empty?,
-          "required checks did not succeed: #{failed.join(', ')}",
+          "required checks did not succeed: #{failed.join(", ")}",
         )
+      end
+
+      def validate_workflow_identity!(workflow, pull_request)
+        valid = workflow["path"] == TEST_WORKFLOW &&
+                workflow["event"] == "pull_request" &&
+                workflow["repository"] == TAP_REPOSITORY &&
+                Array(workflow["pull_requests"]) == [pull_request["number"]]
+        require_value(valid, "workflow is not the expected pull request run")
       end
 
       def validate_upstream!(upstream, request)
         valid = upstream["repository"] == request.formula.repository &&
-          upstream["tag"] == request.tag &&
-          upstream["commit"] == request.commit &&
-          upstream["source_sha256"] == @evidence["source_sha256"] &&
-          upstream["draft"] == false &&
-          upstream["prerelease"] == false &&
-          !upstream["published_at"].to_s.empty?
+                upstream["tag"] == request.tag &&
+                upstream["commit"] == request.commit &&
+                upstream["source_sha256"] == @evidence["source_sha256"] &&
+                upstream["draft"] == false &&
+                upstream["prerelease"] == false &&
+                !upstream["published_at"].to_s.empty?
         require_value(valid, "upstream release evidence does not match request")
       end
 
@@ -378,6 +381,8 @@ module HomebrewTap
           before.is_a?(String) && after.is_a?(String),
           "formula diff content is missing",
         )
+        # First bottles stay on the manual bootstrap path. Automatic updates
+        # must replace bottle metadata that was already published and reviewed.
         require_value(
           FormulaEditor::BOTTLE_START_PATTERN.match?(before),
           "updated formula did not previously contain a bottle block",
