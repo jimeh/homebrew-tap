@@ -6,7 +6,8 @@ title: Tap-owned formulae and bottle automation plan
 
 Date: 2026-07-14
 
-Status: Foundation PR implementation complete; review in progress.
+Status: Foundation [PR #1](https://github.com/jimeh/homebrew-tap/pull/1) is in
+review.
 
 ## Recommendation
 
@@ -548,7 +549,9 @@ produces a durable result. Link PRs and workflow runs here once they exist.
 - [x] Implement and locally verify the tap foundation changes on
   `feat/homebrew-tap-foundation`. Ruby tests, syntax checks, and actionlint
   pass; the pull request matrix owns `brew test-bot` verification.
-- [ ] Open, review, and merge the foundation PR.
+- [ ] Open, review, and merge foundation
+  [PR #1](https://github.com/jimeh/homebrew-tap/pull/1). Draft opened;
+  independent review and CI are in progress.
 - [ ] Implement the source formula migration.
 - [ ] Build, publish, and verify the initial bottles and tap releases.
 - [ ] Configure Release Bot variables, secrets, permissions, and reserved label.
