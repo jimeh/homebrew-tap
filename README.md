@@ -24,8 +24,43 @@ brew tap jimeh/tap
 
 The following Homebrew Formulas are provided by this Homebrew Tap:
 
+- [`airplan`](https://github.com/jimeh/airplan) — turns a local document into a
+  readable, shareable link on macOS and Linux.
 - [`macos-battery-exporter`](https://github.com/jimeh/macos-battery-exporter) —
-  Prometheus exporter for detailed battery metrics on macOS.
+  exports detailed macOS battery metrics for Prometheus.
+
+Install a formula directly, without tapping the repository first:
+
+```sh
+brew install jimeh/tap/airplan
+brew install jimeh/tap/macos-battery-exporter
+```
+
+Once bottles are published, ordinary installs use the compatible bottle for
+the current platform. To build a tagged release from source instead, pass
+`--build-from-source`:
+
+```sh
+brew install --build-from-source jimeh/tap/airplan
+brew install --build-from-source jimeh/tap/macos-battery-exporter
+```
+
+Both formulae also support building the latest upstream development version:
+
+```sh
+brew install --HEAD jimeh/tap/airplan
+brew install --HEAD jimeh/tap/macos-battery-exporter
+```
+
+### Migrating an existing Airplan cask install
+
+Airplan was previously distributed as a cask. Existing cask installations do
+not automatically become formula installations, so migrate them once with:
+
+```sh
+brew uninstall --cask airplan
+brew install --formula jimeh/tap/airplan
+```
 
 ## Maintaining the Tap
 
@@ -41,17 +76,17 @@ repository, adds the resulting `bottle do` block, and updates `main`.
 The `Update formula` workflow accepts manual or `formula-release` repository
 dispatch events for an allowlisted project. It independently verifies the
 published upstream release, resolved tag commit, and source checksum before
-opening a same-repository update pull request. It becomes usable after the
-source formula migration and requires these repository settings before it can
-create pull requests:
+opening a same-repository update pull request. The required repository settings
+are configured:
 
 - Variable: `RELEASE_BOT_CLIENT_ID`
 - Secret: `RELEASE_BOT_PRIVATE_KEY`
 - Label: `automated-formula-update`
 
-Initial formula migration and the first generated updates remain manually
-gated. Trusted automatic publication will be enabled separately after this
-workflow has been exercised.
+The update workflow has not yet been exercised end to end. Initial formula
+migration and the first generated updates remain manually gated. Trusted
+automatic publication will be enabled separately after this workflow has been
+exercised.
 
 See [the implementation plan](HOMEBREW_FORMULAE_AND_BOTTLES_PLAN.md) for the
 rollout sequence, security boundaries, and progress.
