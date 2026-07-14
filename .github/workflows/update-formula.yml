@@ -1,0 +1,142 @@
+name: Update formula
+
+on:
+  repository_dispatch:
+    types: [formula-release]
+  workflow_dispatch:
+    inputs:
+      formula:
+        description: Allowlisted formula name
+        required: true
+        type: string
+      version:
+        description: Stable MAJOR.MINOR.PATCH version
+        required: true
+        type: string
+      tag:
+        description: Upstream release tag
+        required: true
+        type: string
+      commit:
+        description: Full upstream release commit SHA
+        required: true
+        type: string
+      source_run:
+        description: Optional upstream workflow run URL
+        required: false
+        type: string
+
+concurrency:
+  group: update-formula-${{ github.event.client_payload.formula || inputs.formula }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FORMULA: ${{ github.event.client_payload.formula || inputs.formula }}
+      VERSION: ${{ github.event.client_payload.version || inputs.version }}
+      TAG: ${{ github.event.client_payload.tag || inputs.tag }}
+      COMMIT: ${{ github.event.client_payload.commit || inputs.commit }}
+      SOURCE_RUN: ${{ github.event.client_payload.source_run || inputs.source_run }}
+    steps:
+      - name: Create Release Bot token
+        id: release-bot
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+        with:
+          token: ${{ steps.release-bot.outputs.token }}
+
+      - name: Set up git
+        uses: Homebrew/actions/git-user-config@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
+        with:
+          token: ${{ steps.release-bot.outputs.token }}
+
+      - name: Validate release and update formula
+        id: update
+        env:
+          GH_TOKEN: ${{ steps.release-bot.outputs.token }}
+        run: |
+          result="$(script/update-formula \
+            --formula "$FORMULA" \
+            --version "$VERSION" \
+            --tag "$TAG" \
+            --commit "$COMMIT" \
+            --source-run "$SOURCE_RUN")"
+          jq . <<<"$result"
+          for key in status formula repository path version tag commit \
+            archive_url source_sha256 source_run; do
+            value="$(jq -r --arg key "$key" '.[$key] // ""' <<<"$result")"
+            printf '%s=%s\n' "$key" "$value" >>"$GITHUB_OUTPUT"
+          done
+
+      - name: Check formula
+        if: steps.update.outputs.status == 'updated'
+        env:
+          FORMULA_PATH: ${{ steps.update.outputs.path }}
+        run: |
+          changed="$(git diff --name-only)"
+          if [[ "$changed" != "$FORMULA_PATH" ]]; then
+            echo "unexpected changed files: $changed" >&2
+            exit 1
+          fi
+          brew style "$FORMULA_PATH"
+          brew audit --strict "jimeh/tap/$FORMULA"
+          git diff --check
+
+      - name: Open update pull request
+        if: steps.update.outputs.status == 'updated'
+        env:
+          FORMULA_PATH: ${{ steps.update.outputs.path }}
+          GH_TOKEN: ${{ steps.release-bot.outputs.token }}
+          SOURCE_SHA256: ${{ steps.update.outputs.source_sha256 }}
+        run: |
+          branch="automation/$FORMULA-$VERSION"
+          open_prs="$(gh pr list --state open --json headRefName | jq \
+            --arg prefix "automation/$FORMULA-" \
+            '[.[] | select(.headRefName | startswith($prefix))] | length')"
+          if [[ "$open_prs" != "0" ]]; then
+            echo "an open update pull request already exists for $FORMULA" >&2
+            exit 1
+          fi
+          gh label view automated-formula-update >/dev/null
+
+          git switch -c "$branch"
+          git add "$FORMULA_PATH"
+          git diff --cached --check
+          git commit -m "chore($FORMULA): update to $VERSION"
+          git push --set-upstream origin "$branch"
+
+          body_file="$RUNNER_TEMP/formula-update-pr.md"
+          {
+            echo "Updates $FORMULA to the published $TAG release."
+            echo
+            echo "- Upstream: https://github.com/${{ steps.update.outputs.repository }}/releases/tag/$TAG"
+            echo "- Commit: \`$COMMIT\`"
+            echo "- Source SHA-256: \`$SOURCE_SHA256\`"
+            if [[ -n "$SOURCE_RUN" ]]; then
+              echo "- Source workflow: $SOURCE_RUN"
+            fi
+            echo
+            echo "Bottle publication remains manually gated."
+          } >"$body_file"
+
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "chore($FORMULA): update to $VERSION" \
+            --label automated-formula-update \
+            --body-file "$body_file"
