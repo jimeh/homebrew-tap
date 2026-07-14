@@ -190,6 +190,21 @@ class UpdateFormulaTest < Minitest::Test
     assert_equal "Formula/macos-battery-exporter.rb", built.formula.path
   end
 
+  def test_checked_in_formulae_match_updater_contract
+    HomebrewTap::Automation::FORMULAE.each_value do |formula|
+      built = request(
+        formula: formula.name,
+        version: "1.0.0",
+        tag:     "v1.0.0",
+      )
+      path = File.expand_path("../#{built.formula.path}", __dir__)
+      editor = HomebrewTap::Automation::FormulaEditor.new(path)
+
+      assert_match HomebrewTap::Automation::VERSION_PATTERN,
+                   editor.current_version(built)
+    end
+  end
+
   private
 
   def with_formula(name, content)

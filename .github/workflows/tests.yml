@@ -79,10 +79,43 @@ jobs:
       - run: brew test-bot --only-tap-syntax
         if: steps.source-formulae.outputs.present == 'true'
 
-      - run: brew test-bot --only-formulae
+      - name: Build formulae
         if: >-
           github.event_name == 'pull_request' &&
           steps.source-formulae.outputs.present == 'true'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_ARCH" == "X64" ]]; then
+            # Intel Sequoia has no current Go bottle, so bootstrap it in the
+            # same test-bot run while marking only the tap formulae as added.
+            tap_formulae="jimeh/tap/airplan,jimeh/tap/macos-battery-exporter"
+            brew test-bot --only-formulae \
+              --testing-formulae="go,$tap_formulae" \
+              --added-formulae="$tap_formulae"
+            rm -f go--*.bottle.*
+          else
+            brew test-bot --only-formulae
+          fi
+
+      - name: Verify expected bottles
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          steps.source-formulae.outputs.present == 'true'
+        shell: bash
+        run: |
+          count=0
+          for bottle in ./*.bottle.json; do
+            if [[ -e "$bottle" ]]; then
+              count=$((count + 1))
+            fi
+          done
+
+          if [[ "$count" -ne 2 ]]; then
+            printf 'Expected 2 bottle JSON files, found %d.\n' "$count" >&2
+            ls -1 ./*.bottle.* 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
@@ -144,6 +177,26 @@ jobs:
         if: >-
           github.event_name == 'pull_request' &&
           steps.source-formulae.outputs.present == 'true'
+
+      - name: Verify expected bottles
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          steps.source-formulae.outputs.present == 'true'
+        shell: bash
+        run: |
+          count=0
+          for bottle in ./*.bottle.json; do
+            if [[ -e "$bottle" ]]; then
+              count=$((count + 1))
+            fi
+          done
+
+          if [[ "$count" -ne 1 ]]; then
+            printf 'Expected 1 bottle JSON file, found %d.\n' "$count" >&2
+            ls -1 ./*.bottle.* 2>/dev/null || true
+            exit 1
+          fi
 
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'

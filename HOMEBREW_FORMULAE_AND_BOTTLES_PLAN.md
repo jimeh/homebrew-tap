@@ -108,6 +108,12 @@ official `brew tap-new` template currently includes Apple Silicon macOS, Intel
 macOS, and x86-64 Linux; Linux ARM is the one intentional extension. GitHub now
 provides `ubuntu-24.04-arm`, so it does not require a self-hosted runner.
 
+The Intel Sequoia runner has no bottle for the current core Go formula. Its
+test-bot invocation therefore builds core `go` alongside both tap formulae,
+then removes only the generated Go bottle artifacts. Each PR job also verifies
+its expected tap bottle count before artifact upload: two on macOS and one on
+Linux.
+
 The exporter remains macOS-only through `depends_on :macos`. Homebrew's test bot
 should load and audit it on Linux but skip its build there.
 
