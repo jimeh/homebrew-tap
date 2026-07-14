@@ -1,0 +1,14 @@
+class MacosBatteryExporter < Formula
+  desc "Prometheus exporter for battery metrics"
+  homepage "https://github.com/jimeh/macos-battery-exporter"
+  url "https://github.com/jimeh/macos-battery-exporter/archive/refs/tags/v0.0.7.tar.gz"
+  sha256 "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  license "MIT"
+
+  depends_on :macos
+  depends_on "go" => :build
+
+  def install
+    system "go", "build", *std_go_args
+  end
+end

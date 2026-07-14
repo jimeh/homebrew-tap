@@ -18,11 +18,6 @@ module HomebrewTap
     end
 
     FORMULAE = {
-      "airplan"                => Formula.new(
-        name:       "airplan",
-        repository: "jimeh/airplan",
-        path:       "Formula/airplan.rb",
-      ),
       "macos-battery-exporter" => Formula.new(
         name:       "macos-battery-exporter",
         repository: "jimeh/macos-battery-exporter",
@@ -259,10 +254,7 @@ module HomebrewTap
       TEST_WORKFLOW = ".github/workflows/tests.yml"
       REQUIRED_CHECKS = [
         "automation tests",
-        "brew test-bot (macos-14-arm64)",
-        "brew test-bot (macos-14-x86_64)",
-        "brew test-bot (ubuntu-latest)",
-        "brew test-bot (ubuntu-24.04-arm)",
+        "brew test-bot (macos-15-arm64)",
       ].freeze
 
       def initialize(evidence, expected_bot:)

@@ -41,9 +41,9 @@ module AutomationTestHelpers
   end
 
   def request(
-    formula: "airplan",
-    version: "1.1.0",
-    tag: "v1.1.0",
+    formula: "macos-battery-exporter",
+    version: "0.0.7",
+    tag: "v0.0.7",
     commit: COMMIT,
     source_run: nil
   )

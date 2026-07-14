@@ -26,25 +26,12 @@ class ValidatePublishTest < Minitest::Test
     )
     jobs = YAML.safe_load_file(workflow_path).fetch("jobs")
 
-    macos_job = jobs.fetch("test-bot-macos")
-    macos_checks = macos_job
-                   .dig("strategy", "matrix", "include")
-                   .map do |entry|
-      macos_job.fetch("name").gsub(
-        "${{ matrix.platform }}",
-        entry.fetch("platform"),
-      )
-    end
+    expected_jobs = %w[automation-tests test-bot-macos]
+    assert_equal expected_jobs, jobs.keys
 
-    linux_job = jobs.fetch("test-bot-linux")
-    linux_checks = linux_job
-                   .dig("strategy", "matrix", "os")
-                   .map do |os|
-      linux_job.fetch("name").gsub("${{ matrix.os }}", os)
+    expected = expected_jobs.map do |job|
+      jobs.fetch(job).fetch("name")
     end
-
-    expected = [jobs.fetch("automation-tests").fetch("name")]
-    expected.concat(macos_checks, linux_checks)
     assert_equal(
       expected,
       HomebrewTap::Automation::PublishValidator::REQUIRED_CHECKS,
@@ -61,7 +48,10 @@ class ValidatePublishTest < Minitest::Test
       "labels"          => [[], /label/],
       "state"           => ["closed", /not open/],
       "changed_files"   => [
-        ["Formula/airplan.rb", ".github/workflows/publish.yml"],
+        [
+          "Formula/macos-battery-exporter.rb",
+          ".github/workflows/publish.yml",
+        ],
         /unexpected files/,
       ],
     }
@@ -142,9 +132,9 @@ class ValidatePublishTest < Minitest::Test
   def valid_evidence
     {
       "request"       => {
-        "formula" => "airplan",
-        "version" => "1.1.0",
-        "tag"     => "v1.1.0",
+        "formula" => "macos-battery-exporter",
+        "version" => "0.0.7",
+        "tag"     => "v0.0.7",
         "commit"  => COMMIT,
       },
       "source_sha256" => SOURCE_SHA256,
@@ -154,10 +144,10 @@ class ValidatePublishTest < Minitest::Test
         "author"          => BOT,
         "head_repository" => "jimeh/homebrew-tap",
         "base_ref"        => "main",
-        "head_ref"        => "automation/airplan-1.1.0",
+        "head_ref"        => "automation/macos-battery-exporter-0.0.7",
         "head_sha"        => HEAD_SHA,
         "labels"          => ["automated-formula-update"],
-        "changed_files"   => ["Formula/airplan.rb"],
+        "changed_files"   => ["Formula/macos-battery-exporter.rb"],
       },
       "workflow"      => {
         "path"          => ".github/workflows/tests.yml",
@@ -171,8 +161,8 @@ class ValidatePublishTest < Minitest::Test
         end,
       },
       "upstream"      => {
-        "repository"    => "jimeh/airplan",
-        "tag"           => "v1.1.0",
+        "repository"    => "jimeh/macos-battery-exporter",
+        "tag"           => "v0.0.7",
         "commit"        => COMMIT,
         "source_sha256" => SOURCE_SHA256,
         "draft"         => false,
@@ -180,8 +170,8 @@ class ValidatePublishTest < Minitest::Test
         "published_at"  => "2026-07-14T00:00:00Z",
       },
       "diff"          => {
-        "before" => fixture("formulae/airplan-1.0.0.txt"),
-        "after"  => fixture("formulae/airplan-1.1.0.txt"),
+        "before" => fixture("formulae/macos-battery-exporter-0.0.6.txt"),
+        "after"  => fixture("formulae/macos-battery-exporter-0.0.7.txt"),
       },
     }
   end

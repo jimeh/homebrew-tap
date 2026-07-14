@@ -7,7 +7,7 @@ class MacosBatteryExporter < Formula
 
   bottle do
     root_url "https://github.com/jimeh/homebrew-tap/releases/download/macos-battery-exporter-0.0.6"
-    sha256 cellar: :any_skip_relocation, arm64_tahoe: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    sha256 cellar: :any_skip_relocation, arm64_sequoia: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   end
 
   depends_on :macos

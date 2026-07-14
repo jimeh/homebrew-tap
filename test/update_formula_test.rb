@@ -8,18 +8,19 @@ class UpdateFormulaTest < Minitest::Test
   include AutomationTestHelpers
 
   def test_request_accepts_only_allowlisted_stable_release
-    source_run = "https://github.com/jimeh/airplan/actions/runs/123"
+    source_run = "https://github.com/jimeh/macos-battery-exporter/actions/runs/123"
     built = request(source_run: source_run)
 
-    assert_equal "jimeh/airplan", built.formula.repository
-    assert_equal "Formula/airplan.rb", built.formula.path
+    assert_equal "jimeh/macos-battery-exporter", built.formula.repository
+    assert_equal "Formula/macos-battery-exporter.rb", built.formula.path
     assert_equal source_run, built.source_run
   end
 
   def test_request_rejects_hostile_or_mismatched_inputs
     invalid = [
-      { formula: "../airplan" },
-      { version: "1.1.0-rc.1", tag: "v1.1.0-rc.1" },
+      { formula: "airplan" },
+      { formula: "../macos-battery-exporter" },
+      { version: "0.0.7-rc.1", tag: "v0.0.7-rc.1" },
       { tag: "v9.9.9" },
       { commit: "A" * 40 },
       { commit: "a" * 39 },
@@ -35,7 +36,9 @@ class UpdateFormulaTest < Minitest::Test
 
   def test_updater_changes_only_source_fields_and_removes_bottle
     github = FakeGitHub.new
-    with_formula("airplan.rb", fixture("formulae/airplan-1.0.0.txt")) do |root, path|
+    before = fixture("formulae/macos-battery-exporter-0.0.6.txt")
+    after = fixture("formulae/macos-battery-exporter-0.0.7.txt")
+    with_formula("macos-battery-exporter.rb", before) do |root, path|
       result = HomebrewTap::Automation::Updater.new(
         repo_root: root,
         github:    github,
@@ -43,7 +46,7 @@ class UpdateFormulaTest < Minitest::Test
 
       assert_equal :updated, result.status
       assert_equal SOURCE_SHA256, result.source_sha256
-      assert_equal fixture("formulae/airplan-1.1.0.txt"), File.read(path)
+      assert_equal after, File.read(path)
       assert_equal 2, github.verify_calls
       assert_equal 1, github.archive_calls
     end
@@ -51,7 +54,8 @@ class UpdateFormulaTest < Minitest::Test
 
   def test_updater_replay_is_noop
     github = FakeGitHub.new
-    with_formula("airplan.rb", fixture("formulae/airplan-1.1.0.txt")) do |root, path|
+    fixture_name = "formulae/macos-battery-exporter-0.0.7.txt"
+    with_formula("macos-battery-exporter.rb", fixture(fixture_name)) do |root, path|
       before = File.read(path)
       result = HomebrewTap::Automation::Updater.new(
         repo_root: root,
@@ -66,13 +70,14 @@ class UpdateFormulaTest < Minitest::Test
   end
 
   def test_updater_rejects_downgrade_before_writing
-    with_formula("airplan.rb", fixture("formulae/airplan-1.1.0.txt")) do |root, path|
+    fixture_name = "formulae/macos-battery-exporter-0.0.7.txt"
+    with_formula("macos-battery-exporter.rb", fixture(fixture_name)) do |root, path|
       before = File.read(path)
       assert_raises(HomebrewTap::Automation::Error) do
         HomebrewTap::Automation::Updater.new(
           repo_root: root,
           github:    FakeGitHub.new,
-        ).call(request(version: "1.0.0", tag: "v1.0.0"))
+        ).call(request(version: "0.0.6", tag: "v0.0.6"))
       end
       assert_equal before, File.read(path)
     end
@@ -81,7 +86,8 @@ class UpdateFormulaTest < Minitest::Test
   def test_updater_stops_on_failed_release_verification
     github = FakeGitHub.new
     github.release_error = HomebrewTap::Automation::Error.new("draft release")
-    with_formula("airplan.rb", fixture("formulae/airplan-1.0.0.txt")) do |root, path|
+    fixture_name = "formulae/macos-battery-exporter-0.0.6.txt"
+    with_formula("macos-battery-exporter.rb", fixture(fixture_name)) do |root, path|
       before = File.read(path)
       assert_raises(HomebrewTap::Automation::Error) do
         HomebrewTap::Automation::Updater.new(
@@ -97,7 +103,8 @@ class UpdateFormulaTest < Minitest::Test
     github = FakeGitHub.new
     github.release_error = HomebrewTap::Automation::Error.new("tag moved")
     github.release_error_on_call = 2
-    with_formula("airplan.rb", fixture("formulae/airplan-1.0.0.txt")) do |root, path|
+    fixture_name = "formulae/macos-battery-exporter-0.0.6.txt"
+    with_formula("macos-battery-exporter.rb", fixture(fixture_name)) do |root, path|
       before = File.read(path)
       assert_raises(HomebrewTap::Automation::Error) do
         HomebrewTap::Automation::Updater.new(
@@ -114,7 +121,7 @@ class UpdateFormulaTest < Minitest::Test
 
   def test_github_client_requires_published_stable_release
     valid_release = {
-      "tag_name"     => "v1.1.0",
+      "tag_name"     => "v0.0.7",
       "draft"        => false,
       "prerelease"   => false,
       "published_at" => "2026-07-14T00:00:00Z",
@@ -139,9 +146,10 @@ class UpdateFormulaTest < Minitest::Test
   end
 
   def test_editor_rejects_wrong_repository_and_ambiguous_source_sha
-    wrong_repo = fixture("formulae/airplan-1.0.0.txt").sub(
-      "jimeh/airplan/archive",
-      "attacker/airplan/archive",
+    before = fixture("formulae/macos-battery-exporter-0.0.6.txt")
+    wrong_repo = before.sub(
+      "jimeh/macos-battery-exporter/archive",
+      "attacker/macos-battery-exporter/archive",
     )
     assert_raises(HomebrewTap::Automation::Error) do
       HomebrewTap::Automation::FormulaEditor.transform(
@@ -151,7 +159,7 @@ class UpdateFormulaTest < Minitest::Test
       )
     end
 
-    ambiguous = fixture("formulae/airplan-1.0.0.txt").sub(
+    ambiguous = before.sub(
       "  license \"MIT\"",
       %Q(  sha256 "#{"f" * 64}"\n  license "MIT"),
     )
@@ -165,9 +173,9 @@ class UpdateFormulaTest < Minitest::Test
   end
 
   def test_editor_rejects_repository_name_containing_allowlisted_name
-    disguised_repo = fixture("formulae/airplan-1.0.0.txt").sub(
-      "url \"https://github.com/jimeh/airplan",
-      "url \"https://github.com/eviljimeh/airplan",
+    disguised_repo = fixture("formulae/macos-battery-exporter-0.0.6.txt").sub(
+      "url \"https://github.com/jimeh/macos-battery-exporter",
+      "url \"https://github.com/eviljimeh/macos-battery-exporter",
     )
 
     assert_raises(HomebrewTap::Automation::Error) do
@@ -177,17 +185,6 @@ class UpdateFormulaTest < Minitest::Test
         SOURCE_SHA256,
       )
     end
-  end
-
-  def test_exporter_allowlist_maps_to_future_formula_path
-    built = request(
-      formula: "macos-battery-exporter",
-      version: "0.0.7",
-      tag:     "v0.0.7",
-    )
-
-    assert_equal "jimeh/macos-battery-exporter", built.formula.repository
-    assert_equal "Formula/macos-battery-exporter.rb", built.formula.path
   end
 
   def test_checked_in_formulae_match_updater_contract
@@ -219,7 +216,7 @@ class UpdateFormulaTest < Minitest::Test
 
   def stub_github_client(release: nil, commit: COMMIT)
     release ||= {
-      "tag_name"     => "v1.1.0",
+      "tag_name"     => "v0.0.7",
       "draft"        => false,
       "prerelease"   => false,
       "published_at" => "2026-07-14T00:00:00Z",

@@ -35,143 +35,52 @@ jobs:
         run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 
   test-bot-macos:
-    name: brew test-bot (${{ matrix.platform }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: macos-14-arm64
-            runner: macos-14
-            architecture: arm64
-            bottle-tag: arm64_sonoma
-            prefix: /opt/homebrew
-            repository: /opt/homebrew
-            rosetta: false
-          - platform: macos-14-x86_64
-            runner: macos-14
-            architecture: x86_64
-            bottle-tag: sonoma
-            prefix: /usr/local
-            repository: /usr/local/Homebrew
-            rosetta: true
-    runs-on: ${{ matrix.runner }}
+    name: brew test-bot (macos-15-arm64)
+    runs-on: macos-15
     permissions:
       actions: read
       checks: read
       contents: read
       pull-requests: read
     steps:
-      - name: Install Intel Homebrew under Rosetta
-        if: matrix.rosetta == true
-        shell: bash
-        run: |
-          install_ref=c7952e40b7957268f61643152f4db725379b292e
-          installer="$RUNNER_TEMP/install-homebrew.sh"
-          curl -fsSLo "$installer" \
-            "https://raw.githubusercontent.com/Homebrew/install/${install_ref}/install.sh"
-
-          NONINTERACTIVE=1 arch -x86_64 /bin/bash "$installer"
-
-          wrapper_dir="$RUNNER_TEMP/rosetta-homebrew/bin"
-          mkdir -p "$wrapper_dir"
-          printf '%s\n' \
-            '#!/bin/bash' \
-            'exec /usr/bin/arch -x86_64 /usr/local/bin/brew "$@"' \
-            >"$wrapper_dir/brew"
-          chmod +x "$wrapper_dir/brew"
-          printf '%s\n' "$wrapper_dir" >>"$GITHUB_PATH"
-
       - name: Set up Homebrew
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Activate Rosetta Homebrew
-        if: matrix.rosetta == true
-        shell: bash
-        run: |
-          printf '%s\n' \
-            "$RUNNER_TEMP/rosetta-homebrew/bin" >>"$GITHUB_PATH"
-
       - name: Verify Homebrew target
-        shell: bash
-        env:
-          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
-          EXPECTED_PREFIX: ${{ matrix.prefix }}
-          EXPECTED_REPOSITORY: ${{ matrix.repository }}
-          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
         run: |
-          actual_prefix="$(brew --prefix)"
-          actual_repository="$(brew --repository)"
-          actual_architecture="$(
+          architecture="$(
             brew ruby -rrbconfig -e \
               'print RbConfig::CONFIG.fetch("host_cpu")'
           )"
-
-          if [[ "$actual_prefix" != "$EXPECTED_PREFIX" ]]; then
-            printf 'Expected Homebrew prefix %s, found %s.\n' \
-              "$EXPECTED_PREFIX" "$actual_prefix" >&2
+          if [[ "$architecture" != "arm64" ]]; then
+            printf 'Expected arm64 Homebrew, found %s.\n' \
+              "$architecture" >&2
             exit 1
           fi
-
-          if [[ "$actual_repository" != "$EXPECTED_REPOSITORY" ]]; then
-            printf 'Expected Homebrew repository %s, found %s.\n' \
-              "$EXPECTED_REPOSITORY" "$actual_repository" >&2
-            exit 1
-          fi
-
-          if [[ "$actual_architecture" != "$EXPECTED_ARCHITECTURE" ]]; then
-            printf 'Expected Homebrew architecture %s, found %s.\n' \
-              "$EXPECTED_ARCHITECTURE" "$actual_architecture" >&2
-            exit 1
-          fi
-
-          expected_tap_path="$EXPECTED_REPOSITORY/Library/Taps/jimeh/homebrew-tap"
-          if [[ "$TAP_PATH" != "$expected_tap_path" ]]; then
-            printf 'Expected tap path %s, found %s.\n' \
-              "$expected_tap_path" "$TAP_PATH" >&2
-            exit 1
-          fi
-
-      - name: Detect source formulae
-        id: source-formulae
-        shell: bash
-        env:
-          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
-        run: |
-          present=false
-          if compgen -G "$TAP_PATH/Formula/*.rb" >/dev/null; then
-            present=true
-          fi
-          printf 'present=%s\n' "$present" >>"$GITHUB_OUTPUT"
 
       - name: Cache Homebrew Bundler RubyGems
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ${{ matrix.platform }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ${{ matrix.platform }}-rubygems-
+          key: macos-15-arm64-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
+          restore-keys: macos-15-arm64-rubygems-
 
       - run: brew test-bot --only-cleanup-before
 
       - run: brew test-bot --only-setup
 
       - run: brew test-bot --only-tap-syntax
-        if: steps.source-formulae.outputs.present == 'true'
 
       - name: Detect changed formulae
         id: formulae
-        if: >-
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
+        if: github.event_name == 'pull_request'
         run: brew test-bot --only-formulae-detect
 
       - name: Build formulae
-        if: >-
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
-        shell: bash
+        if: github.event_name == 'pull_request'
         env:
           ADDED_FORMULAE: ${{ steps.formulae.outputs.added_formulae }}
           DELETED_FORMULAE: ${{ steps.formulae.outputs.deleted_formulae }}
@@ -187,166 +96,57 @@ jobs:
             "--deleted-formulae=$DELETED_FORMULAE"
 
       - name: Verify expected bottles
-        if: >-
-          always() &&
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
-        shell: bash
+        if: always() && github.event_name == 'pull_request'
         env:
-          EXPECTED_BOTTLE_TAG: ${{ matrix.bottle-tag }}
           TESTING_FORMULAE: ${{ steps.formulae.outputs.testing_formulae }}
         run: |
           expected=0
           IFS=',' read -r -a formulae <<< "$TESTING_FORMULAE"
           for formula in "${formulae[@]}"; do
-            if [[ -n "$formula" ]]; then
-              expected=$((expected + 1))
-            fi
-          done
-
-          count=0
-          for bottle in ./*.bottle.json; do
-            if [[ -e "$bottle" ]]; then
-              count=$((count + 1))
-              if ! brew ruby -rjson -e '
-                tag, path = ARGV
-                metadata = JSON.parse(File.read(path)).values
-                exit 1 unless metadata.all? do |item|
-                  item.dig("bottle", "tags", tag)
-                end
-              ' "$EXPECTED_BOTTLE_TAG" "$bottle"; then
-                printf 'Bottle %s does not contain tag %s.\n' \
-                  "$bottle" "$EXPECTED_BOTTLE_TAG" >&2
+            case "$formula" in
+              macos-battery-exporter|jimeh/tap/macos-battery-exporter)
+                expected=1
+                ;;
+              "")
+                ;;
+              *)
+                printf 'Unexpected formula selected for bottles: %s.\n' \
+                  "$formula" >&2
                 exit 1
-              fi
-            fi
+                ;;
+            esac
           done
 
-          if [[ "$count" -ne "$expected" ]]; then
+          bottle_json=(./*.bottle.json)
+          if [[ ! -e "${bottle_json[0]}" ]]; then
+            bottle_json=()
+          fi
+
+          if [[ "${#bottle_json[@]}" -ne "$expected" ]]; then
             printf 'Expected %d bottle JSON files, found %d.\n' \
-              "$expected" "$count" >&2
+              "$expected" "${#bottle_json[@]}" >&2
             ls -1 ./*.bottle.* 2>/dev/null || true
             exit 1
           fi
+
+          for bottle in "${bottle_json[@]}"; do
+            if ! brew ruby -rjson -e '
+              metadata = JSON.parse(File.read(ARGV.fetch(0))).values
+              valid = metadata.length == 1 && metadata.all? do |item|
+                item.dig("bottle", "tags")&.keys == ["arm64_sequoia"]
+              end
+              exit 1 unless valid
+            ' "$bottle"; then
+              printf 'Bottle %s must contain only arm64_sequoia.\n' \
+                "$bottle" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload bottles as artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: bottles_${{ matrix.platform }}
-          path: '*.bottle.*'
-          if-no-files-found: ignore
-
-  test-bot-linux:
-    name: brew test-bot (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.os }}
-    container:
-      image: ghcr.io/homebrew/brew:main
-      options: --privileged
-    permissions:
-      actions: read
-      checks: read
-      contents: read
-      pull-requests: read
-    steps:
-      - name: Set up Homebrew
-        id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@1f8e202ffddf94def7f42f6fa3a482e821489f9c # 2026.07.10.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Detect source formulae
-        id: source-formulae
-        shell: bash
-        env:
-          TAP_PATH: ${{ steps.set-up-homebrew.outputs.repository-path }}
-        run: |
-          present=false
-          if compgen -G "$TAP_PATH/Formula/*.rb" >/dev/null; then
-            present=true
-          fi
-          printf 'present=%s\n' "$present" >>"$GITHUB_OUTPUT"
-
-      - name: Cache Homebrew Bundler RubyGems
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: ${{ steps.set-up-homebrew.outputs.gems-path }}
-          key: ${{ matrix.os }}-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
-          restore-keys: ${{ matrix.os }}-rubygems-
-
-      - run: brew test-bot --only-cleanup-before
-
-      - run: brew test-bot --only-setup
-
-      - run: brew test-bot --only-tap-syntax
-        if: steps.source-formulae.outputs.present == 'true'
-
-      - name: Detect changed formulae
-        id: formulae
-        if: >-
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
-        run: brew test-bot --only-formulae-detect
-
-      - name: Build formulae
-        if: >-
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
-        shell: bash
-        env:
-          ADDED_FORMULAE: ${{ steps.formulae.outputs.added_formulae }}
-          DELETED_FORMULAE: ${{ steps.formulae.outputs.deleted_formulae }}
-          TESTING_FORMULAE: ${{ steps.formulae.outputs.testing_formulae }}
-        run: |
-          if [[ -z "$TESTING_FORMULAE" && -z "$DELETED_FORMULAE" ]]; then
-            exit 0
-          fi
-
-          brew test-bot --only-formulae \
-            "--testing-formulae=$TESTING_FORMULAE" \
-            "--added-formulae=$ADDED_FORMULAE" \
-            "--deleted-formulae=$DELETED_FORMULAE"
-
-      - name: Verify expected bottles
-        if: >-
-          always() &&
-          github.event_name == 'pull_request' &&
-          steps.source-formulae.outputs.present == 'true'
-        shell: bash
-        env:
-          TESTING_FORMULAE: ${{ steps.formulae.outputs.testing_formulae }}
-        run: |
-          expected=0
-          IFS=',' read -r -a formulae <<< "$TESTING_FORMULAE"
-          for formula in "${formulae[@]}"; do
-            if [[ "$formula" == "jimeh/tap/airplan" ]]; then
-              expected=1
-              break
-            fi
-          done
-
-          count=0
-          for bottle in ./*.bottle.json; do
-            if [[ -e "$bottle" ]]; then
-              count=$((count + 1))
-            fi
-          done
-
-          if [[ "$count" -ne "$expected" ]]; then
-            printf 'Expected %d bottle JSON files, found %d.\n' \
-              "$expected" "$count" >&2
-            ls -1 ./*.bottle.* 2>/dev/null || true
-            exit 1
-          fi
-
-      - name: Upload bottles as artifact
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: bottles_${{ matrix.os }}
+          name: bottles_macos-15-arm64
           path: '*.bottle.*'
           if-no-files-found: ignore
