@@ -286,6 +286,10 @@ module HomebrewTap
           pr["head_repository"] == TAP_REPOSITORY,
           "pull request is from a fork",
         )
+        require_value(
+          pr["number"].is_a?(Integer) && pr["number"].positive?,
+          "invalid pull request number",
+        )
         require_value(pr["base_ref"] == "main", "unexpected pull request base")
         expected_branch = "automation/#{request.formula.name}-#{request.version}"
         require_value(pr["head_ref"] == expected_branch, "unexpected automation branch")

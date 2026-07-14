@@ -20,6 +20,7 @@ class ValidatePublishTest < Minitest::Test
   def test_rejects_untrusted_pull_request_metadata
     cases = {
       "author"          => ["someone-else", /author/],
+      "number"          => [nil, /pull request number/],
       "head_repository" => ["fork/homebrew-tap", /fork/],
       "base_ref"        => ["not-main", /base/],
       "head_ref"        => ["feature/not-automation", /branch/],

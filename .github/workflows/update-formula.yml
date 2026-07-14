@@ -107,7 +107,7 @@ jobs:
           UPSTREAM_REPOSITORY: ${{ steps.update.outputs.repository }}
         run: |
           branch="automation/$FORMULA-$VERSION"
-          open_prs="$(gh pr list --state open --json headRefName | jq \
+          open_prs="$(gh pr list --state open --limit 1000 --json headRefName | jq \
             --arg prefix "automation/$FORMULA-" \
             '[.[] | select(.headRefName | startswith($prefix))] | length')"
           if [[ "$open_prs" != "0" ]]; then
