@@ -79,6 +79,7 @@ class ValidatePublishTest < Minitest::Test
       "author"          => ["someone-else", /author/],
       "number"          => [nil, /pull request number/],
       "head_repository" => ["fork/homebrew-tap", /fork/],
+      "base_repository" => ["someone/homebrew-tap", /targets/],
       "base_ref"        => ["not-main", /base/],
       "head_ref"        => ["feature/not-automation", /branch/],
       "labels"          => [[], /label/],
@@ -179,6 +180,7 @@ class ValidatePublishTest < Minitest::Test
         "state"           => "open",
         "author"          => BOT,
         "head_repository" => "jimeh/homebrew-tap",
+        "base_repository" => "jimeh/homebrew-tap",
         "base_ref"        => "main",
         "head_ref"        => "automation/macos-battery-exporter-0.0.7",
         "head_sha"        => HEAD_SHA,
@@ -186,15 +188,25 @@ class ValidatePublishTest < Minitest::Test
         "changed_files"   => ["Formula/macos-battery-exporter.rb"],
       },
       "workflow"      => {
+        "id"            => 1234,
+        "status"        => "completed",
         "path"          => ".github/workflows/tests.yml",
         "event"         => "pull_request",
         "repository"    => "jimeh/homebrew-tap",
+        "head_branch"   => "automation/macos-battery-exporter-0.0.7",
         "pull_requests" => [42],
         "head_sha"      => HEAD_SHA,
         "conclusion"    => "success",
         "checks"        => HomebrewTap::Automation::PublishValidator::REQUIRED_CHECKS.map do |name|
           { "name" => name, "conclusion" => "success" }
         end,
+        "artifact"      => {
+          "id"              => 9876,
+          "name"            => "bottles_macos-15-arm64",
+          "expired"         => false,
+          "workflow_run_id" => 1234,
+          "head_sha"        => HEAD_SHA,
+        },
       },
       "upstream"      => {
         "repository"    => "jimeh/macos-battery-exporter",
