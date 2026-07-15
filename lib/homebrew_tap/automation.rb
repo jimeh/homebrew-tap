@@ -440,10 +440,10 @@ module HomebrewTap
         root = File.expand_path(directory)
         paths = Dir.glob(File.join(root, "**", "*"), File::FNM_DOTMATCH)
         paths.reject! { |path| [".", ".."].include?(File.basename(path)) }
-        files = paths.reject { |path| File.directory?(path) }
-        if files.any? { |path| File.symlink?(path) }
+        if paths.any? { |path| File.symlink?(path) }
           raise Error, "artifact contains a symbolic link"
         end
+        files = paths.reject { |path| File.directory?(path) }
         unless files.all? { |path| File.file?(path) }
           raise Error, "artifact contains a special file"
         end

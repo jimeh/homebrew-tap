@@ -49,6 +49,18 @@ class CompareBottleArtifactsTest < Minitest::Test
     end
   end
 
+  def test_rejects_directory_symlinks
+    with_artifacts do |expected, actual|
+      write_bottle_set(expected)
+      write_bottle_set(actual)
+      target = File.join(actual, "target")
+      FileUtils.mkdir_p(target)
+      File.symlink(target, File.join(actual, "linked-directory"))
+
+      assert_comparison_fails(expected, actual, /symbolic link/)
+    end
+  end
+
   private
 
   def with_artifacts

@@ -202,6 +202,21 @@ class CollectPublishEvidenceTest < Minitest::Test
                      { "per_page" => 100, "page" => 2 }]
   end
 
+  def test_rejects_ambiguous_bottle_artifacts
+    duplicate = {
+      "id"           => 8765,
+      "name"         => "bottles_macos-15-arm64",
+      "expired"      => false,
+      "workflow_run" => { "id" => RUN_ID, "head_sha" => HEAD_SHA },
+    }
+    error = assert_raises(HomebrewTap::Automation::Error) do
+      collector(
+        github: FakeRest.new(extra_artifacts: [duplicate]),
+      ).call(RUN_ID)
+    end
+    assert_match(/expected exactly one/, error.message)
+  end
+
   def test_extra_changed_files_are_fully_collected_and_rejected
     extra_files = 100.times.map do |index|
       { "filename" => "unexpected/file-#{index}" }
