@@ -6,6 +6,11 @@ class MacosBatteryExporter < Formula
   license "MIT"
   head "https://github.com/jimeh/macos-battery-exporter.git", branch: "main"
 
+  bottle do
+    root_url "https://github.com/jimeh/homebrew-tap/releases/download/macos-battery-exporter-0.0.6"
+    sha256 cellar: :any_skip_relocation, arm64_sequoia: "7da3644a3053cb534d715f185a5e6b1ab93ef12b41ae47e51cd4004fa8ec4ce5"
+  end
+
   depends_on "go" => :build
   depends_on :macos
 
