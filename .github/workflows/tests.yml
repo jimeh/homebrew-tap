@@ -19,8 +19,9 @@ jobs:
       - name: Check Ruby syntax
         run: |
           ruby -c lib/homebrew_tap/automation.rb
-          ruby -c script/update-formula
-          ruby -c script/validate-publish
+          for script_file in script/*; do
+            ruby -c "$script_file"
+          done
           for test_file in test/*_test.rb; do
             ruby -c "$test_file"
           done
