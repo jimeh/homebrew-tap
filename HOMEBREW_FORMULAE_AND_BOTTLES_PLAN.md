@@ -6,14 +6,15 @@ title: Tap-owned exporter formula and bottle automation plan
 
 ## Status
 
-The automation foundation is merged. The exporter-only pull request rescope
-has passed implementation review and CI: Airplan remains an upstream-managed
-Cask, while macOS Battery Exporter becomes the tap's only source Formula and
-receives one Apple Silicon macOS 15 bottle.
+The automation foundation and exporter source Formula are merged. Airplan
+remains an upstream-managed Cask. The exporter has one published Apple Silicon
+macOS 15 bottle on the tap's `macos-battery-exporter-0.0.6` GitHub Release.
 
-The first exporter bottle and first automated exporter update remain manually
-gated. Trusted automatic bottle publication is a later phase and is not part of
-the current pull request.
+The updater no-op smoke test succeeded in workflow run
+[`29421704308`](https://github.com/jimeh/homebrew-tap/actions/runs/29421704308).
+Trusted automatic publication is now implemented around completed `brew
+test-bot` runs. The remaining rollout is the exporter-side dispatch and a real
+release exercising the complete automatic path.
 
 ## Goals
 
@@ -25,8 +26,8 @@ the current pull request.
 - Build one `arm64_sequoia` bottle on GitHub's standard `macos-15` runner.
 - Let exporter releases request a narrowly validated Formula update pull
   request in this repository.
-- Keep bottle publication unprivileged during pull-request testing and
-  manually gated until the end-to-end path has been exercised.
+- Keep bottle publication unprivileged during pull-request testing and allow
+  privileged publication only after independent live revalidation.
 
 ## Non-goals
 
@@ -35,7 +36,6 @@ the current pull request.
 - Replacing Airplan's GoReleaser Cask publication.
 - Providing exporter bottles for Intel, Linux, or Apple Silicon Sonoma.
 - Supporting macOS versions that Homebrew itself does not support.
-- Adding automatic `workflow_run` publication in the current pull request.
 - Changing either upstream repository in the current pull request.
 
 ## Confirmed decisions
@@ -48,9 +48,10 @@ the current pull request.
 6. Apple Silicon macOS 14 and every Intel Mac build the exporter from source.
 7. The Formula uses Homebrew's current Go build dependency rather than the old
    Go version in the exporter repository.
-8. Initial publication uses a manual `brew pr-pull` workflow.
-9. Future automatic publication must revalidate the exact tested pull request
-   head and may only publish trusted Release Bot updates.
+8. Initial publication used a manual `brew pr-pull` workflow, retained as a
+   recovery path.
+9. Automatic publication revalidates the exact tested pull request head and
+   may only publish trusted Release Bot updates.
 10. Airplan requires no upstream changes for this project.
 
 ## Package ownership
@@ -128,9 +129,9 @@ flowchart TD
     D --> E[Ubuntu automation tests]
     D --> F[macos-15 ARM brew test-bot]
     F --> G[One arm64_sequoia bottle artifact]
-    E --> H[Human review and exact-SHA manual publish]
+    E --> H[Trusted workflow-run validation]
     G --> H
-    H --> I[brew pr-pull publishes tap GitHub Release assets]
+    H --> I[Exact artifact comparison and brew pr-upload]
     I --> J[Formula bottle block lands on main]
 ```
 
@@ -233,7 +234,8 @@ The update uses a short-lived GitHub App token created from:
 
 The app should have only the repository permissions needed to write the update
 branch and open the pull request. The dispatch payload is a request, not trusted
-release evidence.
+release evidence. `RELEASE_BOT_LOGIN` pins the expected App author separately
+from the App credentials.
 
 ## Manual bottle publication
 
@@ -252,11 +254,12 @@ The workflow:
 This workflow is privileged and must be invoked only after reviewing the pull
 request and confirming both required checks succeeded at the supplied SHA.
 
-## Future trusted automatic publication
+## Trusted automatic publication
 
-Automatic publication may be added only after manual update and bottle cycles
-have demonstrated the full path. It should be triggered from completed test
-workflow evidence, not from executable code in the update pull request.
+Completed `brew test-bot` pull-request runs trigger the automatic publication
+path. Failed and push runs are skipped before a privileged job starts. The
+workflow checks out its scripts from the default branch and never invokes
+workflow code or scripts introduced by the pull request with a write token.
 
 Before publishing, `PublishValidator` must require all of the following:
 
@@ -279,10 +282,21 @@ Before publishing, `PublishValidator` must require all of the following:
 - The previous Formula already had reviewed bottle metadata; first bottles
   remain on the manual path.
 
-The privileged workflow must check out trusted code from `main`, download the
-artifact associated with the exact validated run, and fail closed if any
-identity or evidence is missing or ambiguous. It must never run pull-request
-code with a write token.
+The collector retrieves the exact run and every paginated job, artifact, and
+changed-file result through the GitHub REST API. It derives the formula,
+version, and tag only from the strictly shaped allowlisted automation branch,
+then independently resolves the upstream commit, stable release metadata,
+source archive checksum, and Formula contents at the pull request base and
+head commits.
+
+Validation first runs in a read-only job. The privileged job collects and
+validates all evidence again, downloads `bottles_macos-15-arm64` by its exact
+artifact ID, and runs `brew pr-pull --no-upload --retain-bottle-dir` for the
+validated pull request and SHA. The complete retained bottle file set must
+match the exact-run download by name and SHA-256. A final live validation runs
+immediately before `brew pr-upload`; only then are release assets uploaded and
+the generated Formula commit pushed. All automatic and manual publications
+share one non-cancelling concurrency group.
 
 ## Upstream integration
 
@@ -334,16 +348,15 @@ The tap continues to resolve and verify all security-sensitive release state.
 - [x] Pass local automation tests, Ruby syntax, actionlint, and diff checks.
 - [x] Pass pull-request CI and independent Codex and Claude reviews.
 
-The rescope is complete and ready for the separately authorized first-bottle
-publication step.
+The rescope and initial publication are complete.
 
 ### Phase 3: first exporter bottle
 
 - [x] Review the open exporter source Formula pull request and obtain green CI.
-- [ ] Run manual `brew pr-pull` against its exact tested head SHA while the
+- [x] Run manual `brew pr-pull` against its exact tested head SHA while the
   pull request remains open; let that workflow publish and integrate it.
-- [ ] Confirm the tap release contains one public bottle asset.
-- [ ] Confirm the generated Formula block contains only `arm64_sequoia`.
+- [x] Confirm the tap release contains one public bottle asset.
+- [x] Confirm the generated Formula block contains only `arm64_sequoia`.
 - [ ] Test a clean ordinary install on Apple Silicon macOS 15 or newer and
   confirm Homebrew pours the bottle.
 - [ ] Test `--build-from-source` and the Homebrew service.
@@ -351,18 +364,20 @@ publication step.
 ### Phase 4: exporter-triggered updates
 
 - [ ] Change the exporter repository in a separate pull request.
-- [ ] Trigger one update through `workflow_dispatch`.
+- [x] Trigger the v0.0.6 no-op update through `workflow_dispatch` and verify
+  the Release Bot credentials in run 29421704308.
 - [ ] Trigger at least one real update through `repository_dispatch`.
 - [ ] Confirm the update pull request changes only the exporter Formula.
-- [ ] Manually publish and verify its replacement bottle.
+- [ ] Automatically publish and verify its replacement bottle.
 
 ### Phase 5: trusted automatic publication
 
-- [ ] Review evidence from the manual update cycles.
-- [ ] Add the guarded privileged publication trigger separately.
-- [ ] Confirm fork and human pull requests cannot reach publication.
-- [ ] Confirm stale, duplicate, failed, or ambiguous checks fail closed.
-- [ ] Confirm the exact tested artifact is the one published.
+- [x] Review evidence from the first manual bottle and updater smoke test.
+- [x] Add the guarded privileged `workflow_run` publication trigger.
+- [x] Add policy tests proving fork and human pull requests are rejected.
+- [x] Add policy tests for stale, duplicate, failed, and ambiguous checks.
+- [x] Require exact-run and Homebrew-selected artifact manifests to match.
+- [ ] Exercise a real Release Bot update through automatic publication.
 
 ## Verification
 
@@ -372,8 +387,7 @@ Run locally and in CI:
 
 ```sh
 ruby -c lib/homebrew_tap/automation.rb
-ruby -c script/update-formula
-ruby -c script/validate-publish
+for script_file in script/*; do ruby -c "$script_file"; done
 for test_file in test/*_test.rb; do ruby -c "$test_file"; done
 for test_file in test/*_test.rb; do ruby -Itest "$test_file"; done
 go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
@@ -387,8 +401,12 @@ Tests must cover:
 - Release verification before and after archive download.
 - Exact Formula URL/SHA changes and bottle-block removal.
 - Replay no-op and downgrade rejection.
-- Future publisher identity, branch, label, exact-SHA, workflow, check, upstream,
+- Publisher identity, branch, label, exact-SHA, workflow, check, upstream,
   and one-file diff validation.
+- Complete pagination for workflow jobs, artifacts, and changed files.
+- Exact bottle artifact filename and SHA-256 comparison.
+- Trusted checkout, read-only prevalidation, validation-before-upload, and
+  retained manual fallback in the publication workflow.
 - Required check names matching the two workflow job names.
 
 ### Homebrew Formula and bottle
@@ -431,7 +449,8 @@ support policy.
 - A missing or non-Sequoia exporter bottle fails validation.
 - Invalid upstream evidence fails before a Formula edit or bot branch push.
 - A stale pull-request SHA cannot be supplied silently to manual publication.
-- Automatic publication remains absent until the separate trust-gate phase.
+- Automatic publication skips failed and push runs before requesting write
+  permissions and fails closed on incomplete live evidence.
 - A bad unpublished update can be fixed in its pull request and rerun.
 - A bad published bottle can be corrected with a Formula revision and bottle
   rebuild; do not silently replace an asset without matching metadata.
@@ -449,8 +468,8 @@ Formula/
 └── macos-battery-exporter.rb
 ```
 
-The resulting repository includes the automation foundation alongside that
-package layout:
+The resulting repository includes the automation and trusted publisher
+alongside that package layout:
 
 ```text
 .github/workflows/tests.yml
@@ -459,14 +478,15 @@ package layout:
 lib/homebrew_tap/automation.rb
 script/update-formula
 script/validate-publish
+script/collect-publish-evidence
+script/compare-bottle-artifacts
 test/*
 ```
 
-Relative to `main`, the current pull request replaces the legacy root exporter
-Formula with the source Formula under `Formula/`, narrows the updater and its
-tests to the exporter, reduces bottle CI to one macOS 15 ARM job, removes stale
-actionlint runner labels, and updates the README and this plan. The Airplan Cask
-is unchanged.
+The automatic-publication change adds the live REST evidence collector, exact
+artifact comparator, privileged workflow gates, tests, and rollout
+documentation. It does not change either package definition or the Airplan
+Cask.
 
 There should be no `Formula/airplan.rb`, Airplan Formula updater fixture,
 Rosetta setup, Intel bottle job, Linux bottle job, or custom actionlint runner

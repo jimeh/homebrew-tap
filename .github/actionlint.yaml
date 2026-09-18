@@ -1,2 +1,3 @@
 config-variables:
   - RELEASE_BOT_CLIENT_ID
+  - RELEASE_BOT_LOGIN

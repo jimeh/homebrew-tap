@@ -62,13 +62,17 @@ brew install --HEAD jimeh/tap/macos-battery-exporter
 
 Pull requests run the automation test suite on Ubuntu and Homebrew's
 `brew test-bot` on a pinned Apple Silicon macOS 15 runner. Exporter Formula
-pull requests upload one `arm64_sequoia` bottle artifact for review but never
-publish it automatically. Cask-only changes produce no bottle.
+pull requests upload one `arm64_sequoia` bottle artifact. Cask-only changes
+produce no bottle.
 
-After a formula pull request is reviewed and all checks pass, run the
-`brew pr-pull` workflow with its pull request number and exact tested head SHA.
-The workflow publishes bottles as assets on a formula-specific release in this
-repository, adds the resulting `bottle do` block, and updates `main`.
+After all checks pass, the `brew pr-pull` workflow automatically publishes a
+trusted Release Bot update. It re-resolves the upstream release and Formula
+diff, requires the current pull request head to match the successful run, and
+compares the bottle selected by Homebrew byte-for-byte with the artifact from
+that exact run before uploading. Human, fork, stale, failed, and unexpected
+pull requests cannot reach automatic publication. A manual dispatch accepting
+the pull request number and exact tested head SHA remains available as a
+recovery path.
 
 The `Update formula` workflow accepts manual or `formula-release` repository
 dispatch events for `macos-battery-exporter`. It independently verifies the
@@ -78,12 +82,15 @@ by its upstream GoReleaser configuration. The required repository settings are
 configured:
 
 - Variable: `RELEASE_BOT_CLIENT_ID`
+- Variable: `RELEASE_BOT_LOGIN`
 - Secret: `RELEASE_BOT_PRIVATE_KEY`
 - Label: `automated-formula-update`
 
-The update workflow has not yet been exercised end to end. The exporter's first
-bottle and generated updates remain manually gated. Trusted automatic
-publication will be enabled separately after this workflow has been exercised.
+The first exporter bottle is published on the tap's
+[`macos-battery-exporter-0.0.6`](https://github.com/jimeh/homebrew-tap/releases/tag/macos-battery-exporter-0.0.6)
+release. The updater's no-op path has also been verified. The remaining rollout
+is to add the exporter-side dispatch and exercise one real release through the
+complete automatic update and bottle path.
 
 See [the implementation plan](HOMEBREW_FORMULAE_AND_BOTTLES_PLAN.md) for the
 rollout sequence, security boundaries, and progress.

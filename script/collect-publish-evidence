@@ -1,0 +1,24 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/homebrew_tap/automation"
+
+options = { repository: ENV.fetch("GITHUB_REPOSITORY", nil) }
+OptionParser.new do |parser|
+  parser.banner = "Usage: script/collect-publish-evidence [options]"
+  parser.on("--repository OWNER/REPO") { |value| options[:repository] = value }
+  parser.on("--run-id ID") { |value| options[:run_id] = value }
+end.parse!
+
+begin
+  evidence = HomebrewTap::Automation::PublishEvidenceCollector.new(
+    repository: options.fetch(:repository),
+  ).call(options.fetch(:run_id))
+  puts JSON.generate(evidence)
+rescue HomebrewTap::Automation::Error, KeyError, OptionParser::ParseError,
+       ArgumentError, TypeError => e
+  warn "collect-publish-evidence: #{e.message}"
+  exit 1
+end

@@ -79,6 +79,7 @@ class ValidatePublishTest < Minitest::Test
       "author"          => ["someone-else", /author/],
       "number"          => [nil, /pull request number/],
       "head_repository" => ["fork/homebrew-tap", /fork/],
+      "base_repository" => ["someone/homebrew-tap", /targets/],
       "base_ref"        => ["not-main", /base/],
       "head_ref"        => ["feature/not-automation", /branch/],
       "labels"          => [[], /label/],
@@ -134,6 +135,23 @@ class ValidatePublishTest < Minitest::Test
     end
   end
 
+  def test_rejects_invalid_artifact_identity
+    cases = [
+      ["expired", true],
+      ["workflow_run_id", 9999],
+      ["head_sha", "d" * 40],
+      ["name", "other-bottles"],
+      ["id", 0],
+      ["id", "9876"],
+    ]
+
+    cases.each do |key, value|
+      evidence = deep_copy(valid_evidence)
+      evidence["workflow"]["artifact"][key] = value
+      assert_rejected(evidence, /expected pull request run/)
+    end
+  end
+
   def test_rejects_mismatched_upstream_state
     %w[repository tag commit].each do |key|
       evidence = deep_copy(valid_evidence)
@@ -163,6 +181,22 @@ class ValidatePublishTest < Minitest::Test
     assert_rejected(evidence, /bottle block/)
   end
 
+  def test_rejects_same_version_formula_replay
+    evidence = deep_copy(valid_evidence)
+    current_sha256 = "a6477d67cd7e4253b548fccd9bbd9214" \
+                     "c473c21a45bb6894a8265e5709124a3e"
+    evidence["request"]["version"] = "0.0.6"
+    evidence["request"]["tag"] = "v0.0.6"
+    evidence["source_sha256"] = current_sha256
+    evidence["pr"]["head_ref"] = "automation/macos-battery-exporter-0.0.6"
+    evidence["workflow"]["head_branch"] = evidence["pr"]["head_ref"]
+    evidence["upstream"]["tag"] = "v0.0.6"
+    evidence["upstream"]["source_sha256"] = current_sha256
+    evidence["diff"]["after"] = evidence["diff"]["before"]
+
+    assert_rejected(evidence, /formula diff is not permitted/)
+  end
+
   private
 
   def valid_evidence
@@ -179,6 +213,7 @@ class ValidatePublishTest < Minitest::Test
         "state"           => "open",
         "author"          => BOT,
         "head_repository" => "jimeh/homebrew-tap",
+        "base_repository" => "jimeh/homebrew-tap",
         "base_ref"        => "main",
         "head_ref"        => "automation/macos-battery-exporter-0.0.7",
         "head_sha"        => HEAD_SHA,
@@ -186,15 +221,25 @@ class ValidatePublishTest < Minitest::Test
         "changed_files"   => ["Formula/macos-battery-exporter.rb"],
       },
       "workflow"      => {
+        "id"            => 1234,
+        "status"        => "completed",
         "path"          => ".github/workflows/tests.yml",
         "event"         => "pull_request",
         "repository"    => "jimeh/homebrew-tap",
+        "head_branch"   => "automation/macos-battery-exporter-0.0.7",
         "pull_requests" => [42],
         "head_sha"      => HEAD_SHA,
         "conclusion"    => "success",
         "checks"        => HomebrewTap::Automation::PublishValidator::REQUIRED_CHECKS.map do |name|
           { "name" => name, "conclusion" => "success" }
         end,
+        "artifact"      => {
+          "id"              => 9876,
+          "name"            => "bottles_macos-15-arm64",
+          "expired"         => false,
+          "workflow_run_id" => 1234,
+          "head_sha"        => HEAD_SHA,
+        },
       },
       "upstream"      => {
         "repository"    => "jimeh/macos-battery-exporter",

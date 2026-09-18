@@ -1,0 +1,25 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require "json"
+require "optparse"
+require_relative "../lib/homebrew_tap/automation"
+
+options = {}
+OptionParser.new do |parser|
+  parser.banner = "Usage: script/compare-bottle-artifacts [options]"
+  parser.on("--expected PATH") { |value| options[:expected] = value }
+  parser.on("--actual PATH") { |value| options[:actual] = value }
+end.parse!
+
+begin
+  manifest = HomebrewTap::Automation::BottleArtifactComparator.compare!(
+    options.fetch(:expected),
+    options.fetch(:actual),
+  )
+  puts JSON.generate(manifest)
+rescue HomebrewTap::Automation::Error, KeyError, OptionParser::ParseError,
+       ArgumentError, TypeError => e
+  warn "compare-bottle-artifacts: #{e.message}"
+  exit 1
+end

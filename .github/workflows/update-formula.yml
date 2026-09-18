@@ -136,7 +136,8 @@ jobs:
               echo "- Source workflow: $SOURCE_RUN"
             fi
             echo
-            echo "Bottle publication remains manually gated."
+            echo "After required checks pass, trusted bot updates publish the"
+            echo "exact tested bottle artifact automatically."
           } >"$body_file"
 
           gh pr create \
